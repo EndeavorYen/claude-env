@@ -1,0 +1,26 @@
+{
+  "name": "my-env",
+  "owner": {
+    "name": "EndeavorYen"
+  },
+  "plugins": [
+    {
+      "name": "squad",
+      "source": {
+        "source": "github",
+        "repo": "EndeavorYen/claude-squad",
+        "ref": "main"
+      },
+      "description": "Self-evolving agent team orchestrator"
+    },
+    {
+      "name": "misc",
+      "source": {
+        "source": "github",
+        "repo": "EndeavorYen/claude-misc",
+        "ref": "main"
+      },
+      "description": "Personal miscellaneous skills and commands"
+    }
+  ]
+}
