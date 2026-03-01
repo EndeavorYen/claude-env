@@ -24,6 +24,14 @@
     "learning-output-style@claude-plugins-official": true,
     "rust-analyzer-lsp@claude-plugins-official": true,
     "skill-creator@claude-plugins-official": true,
-    "squad@squad-marketplace": true
+    "squad@my-env": true
+  },
+  "extraKnownMarketplaces": {
+    "my-env": {
+      "source": {
+        "source": "git",
+        "url": "https://github.com/EndeavorYen/claude-env.git"
+      }
+    }
   }
 }
