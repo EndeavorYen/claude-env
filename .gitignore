@@ -10,3 +10,6 @@ Desktop.ini
 # Battle memory files (tracked — cross-session team wisdom)
 # .battle_memory.yaml → agent memory, ~30 lines
 # .battle_archive.md → human archive, full session records
+
+# Battle state file (temporary — deleted after each session)
+.battle_state.yaml
