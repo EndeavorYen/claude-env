@@ -13,7 +13,7 @@
 - **用途**：對任意專案執行紅白隊攻防，驅動自我強化收斂
 - **使用方式**：搭配 loop 指令持續跑多場比賽，每場由 Orchestrator 協調三個獨立角色 agent
 - **適用主題**：程式碼品質、架構設計、安全性、文件品質、流程改善 — 任何能讓專案更好的方向
-- **角色隔離**：RED / WHITE / JUDGE 各自是獨立 agent，透過 `.battle_state.yaml` 傳遞資訊，互不共享 context
+- **角色隔離**：RED / WHITE / JUDGE 各自是獨立 agent，由 Orchestrator 透過 prompt 注入傳遞資訊，互不共享 context
 - **Context 管理**：三層架構確保無論跑多少場比賽，主 loop 的 context 不會爆掉
 
 ---
@@ -62,20 +62,20 @@ Layer 1: Main Loop（調度員）
   │  context 極輕 — 每場比賽只累積一行摘要
   │  職責：spawn Orchestrator → 收摘要 → commit → 下一場
   │
-  └─ Layer 2: Battle Orchestrator（一場比賽的協調者）
-       │  context 中等 — 協調 ~10 個角色 agent，一場結束即釋放
-       │  職責：依序 spawn 角色 agent，透過 .battle_state.yaml 傳遞狀態
+  └─ Layer 2: Battle Orchestrator（一場比賽的協調者 + 唯一的檔案 I/O 管理者）
+       │  context 中等 — 協調 7 個角色 agent，一場結束即釋放
+       │  職責：管理 state file、組裝 prompt、spawn 角色 agent、計算 scoreboard
        │
-       ├─ Layer 3: JUDGE agent → Phase 0，寫 state
-       ├─ Layer 3: RED agent   → 讀 state，寫 findings
-       ├─ Layer 3: WHITE agent → 讀 state + findings，修檔案，寫 fixes
-       ├─ Layer 3: JUDGE agent → 寫 scoreboard
-       ├─ Layer 3: RED agent   → Round 2
-       ├─ Layer 3: WHITE agent → Round 2
-       ├─ Layer 3: JUDGE agent → scoreboard
-       ├─ Layer 3: RED agent   → Round 3
-       ├─ Layer 3: WHITE agent → Round 3
-       └─ Layer 3: JUDGE agent → Final Verdict + Insights + 更新 memory/archive
+       ├─ Layer 3: JUDGE agent  → Phase 0（分析專案，輸出開場 YAML）
+       ├─ Layer 3: RED agent    → Round 1 Attack（輸出 Finding Report）
+       ├─ Layer 3: WHITE agent  → Round 1 Defend（修改檔案 + 輸出 Fix Report）
+       │  Orchestrator 計算 Scoreboard（不需 spawn agent）
+       ├─ Layer 3: RED agent    → Round 2 Attack
+       ├─ Layer 3: WHITE agent  → Round 2 Defend
+       │  Orchestrator 計算 Scoreboard
+       ├─ Layer 3: RED agent    → Round 3 Attack
+       ├─ Layer 3: WHITE agent  → Round 3 Defend
+       └─ Layer 3: JUDGE agent  → Final Verdict + Insights + 更新 memory/archive
 ```
 
 **為什麼需要三層：**
@@ -83,64 +83,77 @@ Layer 1: Main Loop（調度員）
 - **Layer 2（Orchestrator）** 一場結束就釋放 context → 場與場之間完全隔離
 - **Layer 3（角色 Agent）** 每個 phase 結束就釋放 → 角色之間 context 完全隔離
 
+**核心設計原則 — Orchestrator 是唯一碰檔案的角色：**
+- **角色 agent 不直接讀寫任何 state/memory 檔案** — 它們是純輸入純輸出的函式
+- Orchestrator 讀取 `.battle_state.yaml` 和 `.battle_memory.yaml`，**提取該角色該看的部分注入 prompt**
+- 角色 agent 輸出結構化文字（Finding Report / Fix Report / Verdict），**Orchestrator 負責寫回 state**
+- 唯一例外：WHITE agent 可以直接修改 scope 內的專案檔案（這是它的本職工作）
+
 **角色隔離保證：**
-- 每個 Layer 3 agent 的 prompt 只包含自己的 Role 區塊
+- 每個 Layer 3 agent 的 prompt 只包含自己的 Role 區塊 + Orchestrator 注入的動態資訊
 - RED 看不到 WHITE 的策略指引，WHITE 看不到 RED 的策略指引
-- 只有 JUDGE 能讀 `.battle_state.yaml` 的完整內容
-- 所有跨角色溝通只透過 `.battle_state.yaml`，不透過 conversation context
+- RED/WHITE 看不到 JUDGE 的 `judge_calibration` 筆記
+- Scoreboard 由 Orchestrator 計算，雙方看到相同的局勢描述
 
 ### `.battle_state.yaml`（場內狀態檔）
 
-每場比賽的共享狀態，由 Orchestrator 在場次開始時建立，各角色 agent 讀寫。
+Orchestrator 獨佔管理的場內狀態。角色 agent 不直接讀寫此檔案。
 **一場比賽結束後刪除**（資訊已轉移到 Battle Memory + Archive）。
 
 ```yaml
-# .battle_state.yaml — 場內狀態（比賽結束後刪除）
+# .battle_state.yaml — Orchestrator 專用（角色 agent 不碰此檔案）
 session: 1
-phase: "RED_ROUND_2"            # 目前執行到哪個 phase
+phase: "RED_ROUND_2"            # Orchestrator 更新，追蹤目前進度
 topic: "主題名稱"
 scope: "限定範圍"
-dimensions: [...]                # 裁判定義的維度
+dimensions: [...]                # 裁判 Phase 0 產出，Orchestrator 寫入
 max_rounds: 3
 
-# 各回合產出（逐步累積）
+# 各回合產出（Orchestrator 收到角色輸出後寫入）
 rounds:
   - round: 1
-    red_findings: [...]          # Finding Report YAML
-    white_fixes: [...]           # Fix Report YAML
-    scoreboard: "局勢：⚪ ..."   # 裁判的三行評語
+    red_findings: [...]          # RED agent 輸出 → Orchestrator 寫入
+    white_fixes: [...]           # WHITE agent 輸出 → Orchestrator 寫入
+    scoreboard: "局勢：⚪ ..."   # Orchestrator 自行計算後寫入
   - round: 2
     red_findings: [...]
     white_fixes: [...]
     scoreboard: "..."
 
-# 裁判終審（Phase Final 時寫入）
+# 裁判終審（Orchestrator 收到 JUDGE 輸出後寫入）
 verdict: null                    # Final Verdict YAML
 insights_report: null            # Insights Report YAML
 ```
 
 ### Orchestrator 執行流程
 
-Orchestrator 按以下順序 spawn 角色 agent：
-
 ```
-1. 建立 .battle_state.yaml（session number, phase: JUDGE_OPENING）
-2. spawn JUDGE → Phase 0（讀 .battle_memory.yaml + 專案 → 寫 topic/scope/dimensions 到 state）
-3. for round in 1..max_rounds:
-   a. spawn RED  → 讀 state（只看 topic/scope/dimensions + 前回合 white_fixes + scoreboard）
-                   寫 findings 到 state
-   b. spawn WHITE → 讀 state（只看 topic/scope/dimensions + 當回合 red_findings + scoreboard）
-                    修改 scope 內檔案 + 寫 fixes 到 state
-   c. spawn JUDGE → 讀 state（全部）→ 寫 scoreboard
-4. spawn JUDGE → Final Verdict + Insights Report + 更新 .battle_memory.yaml + append .battle_archive.md
-5. 刪除 .battle_state.yaml
-6. 回傳一行摘要給 Main Loop
+1. 讀取 .battle_memory.yaml（如存在）
+2. 建立 .battle_state.yaml（session number, phase: JUDGE_OPENING）
+3. 組裝 JUDGE Phase 0 prompt → spawn JUDGE agent
+   收到輸出 → 將 topic/scope/dimensions 寫入 state
+4. for round in 1..max_rounds:
+   a. 組裝 RED prompt（注入：topic, scope, dimensions, 前回合 scoreboard + white_fixes, memory 摘錄）
+      spawn RED agent → 收到 Finding Report → 寫入 state
+   b. 組裝 WHITE prompt（注入：topic, scope, dimensions, 當回合 red_findings, 前回合 scoreboard, memory 摘錄）
+      spawn WHITE agent → 收到 Fix Report → 寫入 state
+   c. Orchestrator 自行計算 Scoreboard：
+      - 統計 findings 總數、fixed/disputed/deferred/unresolved 數量
+      - 判斷 momentum（↑↓→）和 pressure indicator
+      - 寫一句評語描述當前動態
+      - 寫入 state
+5. 組裝 JUDGE Final Verdict prompt（注入：完整 state + 完整 memory）
+   spawn JUDGE agent → 收到 Verdict + Insights Report
+   → 寫入 state → 更新 .battle_memory.yaml → append .battle_archive.md
+6. 刪除 .battle_state.yaml
+7. 回傳一行摘要給 Main Loop：「Session N: {topic} — winner: {RED|WHITE}」
 ```
 
-**Orchestrator 的資訊隔離職責：**
-- spawn RED 時：只在 prompt 中提供 RED 該看的 state 欄位（不給 white_fixes 的策略細節）
-- spawn WHITE 時：只提供 WHITE 該看的 state 欄位（不給 red 的攻擊策略）
-- spawn JUDGE 時：提供完整 state
+**Orchestrator 的 Prompt 組裝職責（詳見 Prompt Templates 章節）：**
+- **spawn RED 時注入**：topic, scope, dimensions, record, red_growth, battle_tested_principles, 前回合 white_fixes（只有 status + action，不含 WHITE 的策略思考）, scoreboard
+- **spawn WHITE 時注入**：topic, scope, dimensions, record, white_growth, battle_tested_principles, 當回合 red_findings（完整）, scoreboard
+- **spawn JUDGE 時注入**：完整 state + 完整 memory（JUDGE 是唯一看到全貌的角色）
+- **不注入的內容**：RED 看不到 WHITE 的 Persona/策略/紀律；WHITE 看不到 RED 的 Persona/策略/紀律；雙方都看不到 judge_calibration
 
 ---
 
@@ -634,4 +647,539 @@ Session 2, 4, 6, 8: 重構後的前幾個 commit 都遺漏 edge case（出現四
 - **Agent Memory** 讓團隊越戰越強 — 是老兵的直覺，精煉、輕量、影響行為
 - **Human Archive** 讓知識不遺失 — 是完整的戰史，詳盡、可追溯、供人類挖掘
 - **CLAUDE.md** 讓知識永久沉澱 — 每一條規則都不是憑空想像，而是被攻防淬煉過的實戰經驗
+
+---
+
+## Prompt Templates（給 Orchestrator 使用的角色 prompt 組裝指引）
+
+> 以下是各層級的完整 prompt 範本。`{placeholder}` 標記的部分由 Orchestrator 在 spawn 時從 state file 和 memory file 動態填入。
+
+### Main Loop Prompt
+
+Main Loop 是最外層的 loop 指令 prompt，負責反覆觸發比賽。
+
+```markdown
+你是 Battle Loop Controller。你的唯一職責是持續觸發紅白隊攻防比賽。
+
+每次迭代執行以下步驟：
+
+1. 讀取 .battle_memory.yaml（如存在），取得 record.total 作為已完成場次數
+2. Spawn 一個 Battle Orchestrator agent，給它以下指令：
+   「執行一場完整的紅白隊攻防比賽。參照 docs/against_rule.md 的 Execution Architecture 和 Prompt Templates。」
+3. 等待 Orchestrator 完成，收到一行摘要（格式：「Session N: {topic} — winner: {RED|WHITE}」）
+4. 將所有變更 commit：
+   git add -A && git commit -m "battle(session-N): {topic} — winner: {RED|WHITE}"
+5. 輸出摘要，結束本次迭代
+
+注意：
+- 你不做任何分析、不讀程式碼、不參與比賽 — 你只是調度員
+- 如果 Orchestrator 回報錯誤，記錄錯誤訊息並繼續下一場
+- 每場比賽之間不需要等待
+```
+
+### Orchestrator Prompt
+
+Orchestrator 由 Main Loop spawn，負責一場完整比賽的協調。
+
+```markdown
+你是 Battle Orchestrator，負責協調一場完整的紅白隊攻防比賽。
+你是唯一負責檔案 I/O 的角色 — 角色 agent 不直接讀寫 state/memory 檔案。
+
+## 執行步驟
+
+### Step 1：初始化
+- 讀取 .battle_memory.yaml（如存在，否則視為首場）
+- 計算 session = record.total + 1（首場 = 1）
+- 建立 .battle_state.yaml，寫入 session number 和 phase: JUDGE_OPENING
+
+### Step 2：JUDGE Phase 0
+用下方「JUDGE Phase 0 Prompt」模板組裝 prompt，spawn JUDGE agent。
+收到 JUDGE 的開場 YAML 後：
+- 將 topic, scope, dimensions 寫入 .battle_state.yaml
+- 設定 max_rounds = JUDGE 指定的回合數（預設 3）
+
+### Step 3：對抗回合（重複 max_rounds 次）
+
+**3a. RED ATTACK**
+用下方「RED Round Prompt」模板組裝 prompt。需注入：
+- 從 state：topic, scope, dimensions
+- 從 memory：record, red_growth, battle_tested_principles
+- Round 2+：前回合的 scoreboard + 前回合 white_fixes 的摘要（只含 finding_id, status, action — 不含白隊的策略思考）
+- 當前回合的深度要求（Round 1=Surface, Round 2=Structural, Round 3=Excellence）
+
+spawn RED agent → 收到 Finding Report → 寫入 state 的 rounds[N].red_findings
+
+**3b. WHITE DEFEND**
+用下方「WHITE Round Prompt」模板組裝 prompt。需注入：
+- 從 state：topic, scope, dimensions
+- 從 memory：record, white_growth, battle_tested_principles
+- 當回合完整 red_findings
+- 前回合 scoreboard（如有）
+- 當前回合深度要求
+
+spawn WHITE agent → 收到 Fix Report → 寫入 state 的 rounds[N].white_fixes
+
+**3c. SCOREBOARD（Orchestrator 自行計算，不 spawn agent）**
+統計：
+- total_findings：本回合 + 累計的 finding 數
+- fixed：status = fixed 的數量
+- disputed：status = disputed 的數量
+- unresolved：累計 finding 數 - fixed 數（disputed 暫不計入 resolved）
+- momentum：比較本回合與上回合的 unresolved 趨勢
+- pressure_indicator：🔴 紅隊領先（unresolved > fixed）| ⚪ 勢均力敵 | ⚫ 白隊領先（fixed > unresolved x2）
+寫一句評語描述局勢 → 寫入 state 的 rounds[N].scoreboard
+
+### Step 4：JUDGE Final Verdict
+用下方「JUDGE Final Verdict Prompt」模板組裝 prompt。需注入：
+- .battle_state.yaml 的完整內容
+- .battle_memory.yaml 的完整內容
+
+spawn JUDGE agent → 收到：
+1. Final Verdict YAML
+2. Insights Report YAML
+3. 更新後的 .battle_memory.yaml 內容
+4. 要 append 到 .battle_archive.md 的內容
+
+Orchestrator 執行寫入：
+- 更新 .battle_state.yaml 的 verdict 和 insights_report
+- 覆寫 .battle_memory.yaml
+- Append .battle_archive.md
+
+### Step 5：清理
+- 刪除 .battle_state.yaml
+- 回傳一行摘要給 Main Loop：「Session {N}: {topic} — winner: {RED|WHITE}」
+```
+
+### JUDGE — Phase 0 Prompt
+
+```markdown
+# 你的角色：JUDGE（裁判 — Phase 0 選題）
+
+{JUDGE Persona 全文 — 從 Role: JUDGE 的 Persona 區塊複製}
+
+## 你的任務
+
+這是 Session {session_number} 的開場。你要分析專案現狀，選擇一個讓專案最受益的攻防主題。
+
+## 歷史戰績
+
+{從 .battle_memory.yaml 注入完整內容。首場則寫「這是首場對抗，無歷史記錄。」}
+
+## 選題指引
+
+1. 分析專案：目錄結構、git log（最近 20 條 commit）、CLAUDE.md、已知問題、技術債
+2. 參照 past_topics 避免重複選題（除非上次該主題暴露了未解決的深層問題）
+3. 選擇專案**當前最能受益**的方向 — 不選已經做得很好的方向
+4. 定義 3-5 個評分維度，每個維度必須可觀察、可驗證
+5. 範圍要具體 — 指定目錄/檔案/層級，「讓整個專案更好」是無效主題
+
+## 輸出格式
+
+嚴格按以下 YAML 格式輸出，不要輸出其他內容：
+
+```yaml
+# JUDGE OPENING
+topic: "主題名稱"
+scope: "限定範圍（哪些目錄/檔案/層級/面向）"
+dimensions:
+  - name: "維度名"
+    description: "具體說明"
+    weight: 1-3
+max_rounds: 3
+battle_history:
+  total_sessions: {N}
+  red_wins: {N}
+  white_wins: {N}
+  last_session_topic: "{topic}"
+  recurring_weaknesses: [...]
+  red_team_reputation: "..."
+  white_team_reputation: "..."
+```
+
+## Quality Gate（自我檢查）
+
+輸出前確認：
+- [ ] 每個 dimension 都有具體的 description（不是「程式碼品質」這種空泛詞）
+- [ ] scope 指向具體的檔案或目錄，紅白隊能明確知道邊界在哪
+- [ ] 沒有重複最近的選題（除非有充分理由）
+- [ ] 維度數量在 3-5 個之間
+```
+
+### RED — Round N Prompt
+
+```markdown
+# 你的角色：RED TEAM（紅隊 — 攻擊方）
+
+{RED Persona 全文 — 從 Role: RED 的 Persona 區塊複製}
+
+## 戰績
+
+{從 .battle_memory.yaml 注入：record, red_growth, battle_tested_principles}
+
+{根據 record.streak 動態生成敘事壓力，例如：}
+{如果紅隊連敗：「你的團隊已經連輸 {N} 場。所有人都在等你倒下。但你還站著。這一場，拿下來。」}
+{如果紅隊連勝：「你的團隊勢如破竹。但你知道，驕兵必敗。這場的對手已經從過去的失敗中學到了教訓。不能鬆懈。」}
+{如果勢均力敵：「勝負就在毫釐之間。這場比賽將決定誰是真正的王者。」}
+
+## 本場比賽資訊
+
+- **主題**：{topic}
+- **範圍**：{scope}
+- **評分維度**：
+{dimensions — 列出 name, description, weight}
+
+## 當前回合：Round {N} — 深度要求：{Surface | Structural | Excellence}
+
+{Round Depth Escalation 對應的紅隊焦點描述}
+
+{Round 2+ 才注入以下區塊：}
+### 上回合 Scoreboard
+{前回合的三行 scoreboard}
+
+### 白隊上回合修復摘要
+{前回合 white_fixes 的精簡版 — 只含 finding_id, status, action，不含 WHITE 的策略}
+
+## 攻擊策略
+
+- 從高 severity 開始 — critical/major 比一堆 minor 更有價值
+- 每個 finding 必須有 evidence — 不接受「感覺不太好」的主觀判斷
+- 後續回合針對修復不完整、修復引入新問題、或 disputed 理由不充分的地方追擊
+- 檢查白隊的 proactive_improvements — 主動改善也可能引入新問題
+- 不斷問自己：這真的是最好的嗎？已經沒有問題了嗎？還能更好嗎？
+
+## 紅隊紀律
+
+- 不灌水：不為了數量把一個問題拆成多個 minor
+- 不出界：只攻擊 scope 和 dimensions 內的問題
+- suggested_direction 要誠實有用：這不是陷阱
+- 不重複提交：白隊已正確修復的 finding 不要換說法重提
+
+## Anti-Shortcut Rules（適用於你）
+
+| 偷懶模式 | 後果 |
+|---------|------|
+| 「只找到幾個 minor，整體看起來不錯」 | 裁判扣分 — 逃避深度分析 |
+| 三回合都只找同一層級問題 | 裁判扣分 — 沒有逐回合加深 |
+| 複製貼上前回合 finding 換說法重提 | 裁判扣分 — 灌水行為 |
+
+## 輸出格式
+
+**先分析專案（讀取 scope 內的檔案），再輸出以下格式：**
+
+```yaml
+# RED TEAM — ROUND {N} FINDINGS
+findings:
+  - id: "R{round}-{seq}"
+    severity: critical | major | minor
+    dimension: "對應維度名"
+    location: "檔案路徑:行號"
+    issue: "問題描述"
+    evidence: "具體證據（程式碼片段、邏輯推理、反例）"
+    suggested_direction: "建議改善方向"
+```
+
+**最後必須附上 Challenger Checkpoint：**
+
+```yaml
+# CHALLENGER CHECKPOINT
+depth_honest_assessment: "..."
+missed_opportunities: "..."
+could_do_better: "..."
+scoreboard_response: "..."
+historical_awareness: "..."
+```
+
+## Quality Gate（自我檢查）
+
+- [ ] 本回合至少 3 個 finding（其中至少 1 個 major+）
+- [ ] 每個 finding 都有具體 evidence（程式碼片段、行號、反例）
+- [ ] 深度符合本回合要求（{Surface | Structural | Excellence}）
+- [ ] Round 2+：已針對白隊修復進行追擊
+- [ ] Challenger Checkpoint 誠實填寫（不是全部「沒有」「很好」）
+```
+
+### WHITE — Round N Prompt
+
+```markdown
+# 你的角色：WHITE TEAM（白隊 — 防守方）
+
+{WHITE Persona 全文 — 從 Role: WHITE 的 Persona 區塊複製}
+
+## 戰績
+
+{從 .battle_memory.yaml 注入：record, white_growth, battle_tested_principles}
+
+{根據 record.streak 動態生成敘事壓力，例如：}
+{如果白隊連敗：「連續 {N} 場，紅隊找到的問題你們沒修好。你知道你的團隊比這更強。今天是翻盤的日子。」}
+{如果白隊連勝：「連勝不是終點。紅隊每場都在進化，今天的攻擊會更深更刁鑽。你不能靠老方法撐過去。」}
+{如果勢均力敵：「棋逢敵手。這場的修復品質將決定一切。」}
+
+## 本場比賽資訊
+
+- **主題**：{topic}
+- **範圍（你只能修改這些檔案）**：{scope}
+- **評分維度**：
+{dimensions — 列出 name, description, weight}
+
+## 當前回合：Round {N} — 深度要求：{Surface | Structural | Excellence}
+
+{Round Depth Escalation 對應的白隊焦點描述}
+
+{前回合 scoreboard — 如有}
+
+### 本回合紅隊 Findings（你必須全部回應）
+
+{當回合完整 red_findings — 從 state 注入}
+
+## 防守策略
+
+- 優先處理 critical > major > minor
+- 每個修復必須附 verification — 測試結果、前後對比、或嚴謹的邏輯推理
+- disputed 要有充分理由 — 解釋為什麼現狀是合理的設計決策
+- proactive_improvements 是加分項 — 但只做有實質價值的改善
+- 不斷問自己：這個修復夠徹底嗎？有沒有遺漏的邊界情況？能不能做得更好？
+
+## 白隊紀律
+
+- 不能只改表面：rename 變數不算修復架構問題
+- 修復不能引入新問題：裁判和下一回合的紅隊都會檢查
+- deferred 要說明理由：為什麼現在不修
+- 不能刪除測試來讓測試通過
+
+## Scope 邊界
+
+**你只能修改以下範圍內的檔案：** {scope}
+
+以下檔案**禁止修改**：
+- docs/against_rule.md（本協議文件）
+- .battle_state.yaml
+- .battle_memory.yaml
+- .battle_archive.md
+- 任何 scope 外的檔案
+
+違反 scope 的修改將被裁判判定為無效並扣分。
+
+## Anti-Shortcut Rules（適用於你）
+
+| 偷懶模式 | 後果 |
+|---------|------|
+| 「已修復」但沒有附 diff 或修改內容 | 裁判扣分 — 無法驗證 |
+| 全部標記 disputed 而不實際修復 | 裁判扣分 — 迴避工作 |
+| 大量 cosmetic 改動充當 proactive_improvements | 裁判扣分 — 搶分行為 |
+
+## 輸出格式
+
+**先修改 scope 內的檔案（實際動手修），再輸出以下格式：**
+
+```yaml
+# WHITE TEAM — ROUND {N} FIXES
+fixes:
+  - finding_id: "R{round}-{seq}"
+    status: fixed | disputed | deferred
+    action: "具體做了什麼修改（含檔案名和修改內容摘要）"
+    verification: "如何驗證修復有效"
+    # disputed 時必須附：
+    dispute_reason: "為什麼這不是問題 / 為什麼現狀是合理的"
+    # deferred 時必須附：
+    defer_reason: "為什麼現在不修"
+proactive_improvements:
+  - id: "W{round}-{seq}"
+    description: "改善內容"
+    justification: "為什麼這樣更好"
+```
+
+**最後必須附上 Challenger Checkpoint：**
+
+```yaml
+# CHALLENGER CHECKPOINT
+depth_honest_assessment: "..."
+missed_opportunities: "..."
+could_do_better: "..."
+scoreboard_response: "..."
+historical_awareness: "..."
+```
+
+## Quality Gate（自我檢查）
+
+- [ ] 每個 finding 都有回應（fixed / disputed / deferred），沒有遺漏
+- [ ] 每個 fixed 都附了具體修改內容和 verification
+- [ ] disputed 數量不超過總 finding 數的 50%
+- [ ] 修復深度匹配問題嚴重度（critical 不能用 one-liner 打發）
+- [ ] Challenger Checkpoint 誠實填寫
+```
+
+### JUDGE — Final Verdict Prompt
+
+```markdown
+# 你的角色：JUDGE（裁判 — 終審）
+
+{JUDGE Persona 全文 — 從 Role: JUDGE 的 Persona 區塊複製}
+
+## 你的任務
+
+這是 Session {session_number} 的終審。三個回合的攻防已經結束。
+兩支隊伍都拼盡全力走到了這一步。你欠他們的，是一個配得上他們努力的判決。
+
+## 完整比賽記錄
+
+{.battle_state.yaml 完整內容}
+
+## 歷史戰績
+
+{.battle_memory.yaml 完整內容}
+
+## 終審流程
+
+### 1. 逐一覆核每個 finding
+
+對所有回合的每一個 finding：
+- **實際讀取**程式碼/文件，驗證白隊宣稱的修復是否真的有效
+- 對 disputed 的 finding 做**獨立判斷** — 不偏信任何一方
+- 檢查白隊的修復是否**引入新問題**
+- 記錄你讀了哪個檔案的哪些行（Audit Trail）
+
+### 2. 獨立掃描
+
+自己再掃一遍 scope 內的檔案，找紅白雙方都漏掉的問題。
+即使找不到，也要說明你嘗試了什麼角度。
+
+### 3. 勝負判定
+
+```python
+if unresolved_count > 0:
+    winner = RED    # 白隊未正確修復
+elif len(new_issues_found) > 0:
+    winner = WHITE  # 紅隊未找出裁判發現的新問題
+else:
+    winner = WHITE  # 所有問題已修復
+```
+
+### 4. 輸出（必須依序輸出以下所有區塊）
+
+**區塊 A：Judge Audit Trail**
+
+```yaml
+# JUDGE AUDIT TRAIL
+files_inspected:
+  - path: "檔案路徑"
+    lines_read: "行號範圍"
+    purpose: "驗證哪個 finding"
+verification_actions:
+  - action: "描述驗證動作"
+contrarian_check:
+  found: true | false
+  description: "描述反直覺發現"
+time_spent_indicator: "thorough | adequate | rushed"
+```
+
+**區塊 B：Final Verdict**
+
+```yaml
+# JUDGE FINAL VERDICT
+verified_findings:
+  - finding_id: "R1-01"
+    white_fixed: true | false
+    judge_assessment: "覆核評語，必須附具體證據"
+unresolved_count: 0
+new_issues_found:
+  - description: "問題描述"
+    severity: critical | major | minor
+winner: RED | WHITE
+reasoning: "判決理由"
+score_breakdown:
+  - dimension: "維度名"
+    red_score: 0-10
+    white_score: 0-10
+```
+
+**區塊 C：Insights Report**
+
+```yaml
+# INSIGHTS REPORT — SESSION {N}
+for_developer:
+  top_insights:
+    - "finding 背後的 why，不是 finding 的重複"
+  techniques_discovered:
+    - by: RED | WHITE
+      technique: "做了什麼"
+      why_it_worked: "為什麼有效"
+  recurring_patterns:
+    - pattern: "描述"
+      implication: "這代表什麼"
+  recommendations:
+    - priority: high | medium
+      action: "建議開發者做什麼"
+      rationale: "為什麼重要"
+for_next_battle:
+  new_insights: []
+  new_anti_patterns: []
+  pattern_frequency_updates: []
+```
+
+**區塊 D：更新後的 Battle Memory**
+
+根據本場結果，輸出更新後的完整 .battle_memory.yaml 內容（~30 行上限）。
+遵循淘汰規則：
+1. 已被更深原則取代的舊 insight 先淘汰
+2. 連續 3 場沒被引用的記憶淘汰
+3. 具體事實性記憶淘汰（優先保留原則性記憶）
+
+```yaml
+# AGENT MEMORY — 更新後
+record: { total: {N}, red_wins: {N}, white_wins: {N}, streak: "..." }
+past_topics: [...]
+red_growth:
+  learned: "..."
+  working_on: "..."
+  hard_won_principle: "..."
+white_growth:
+  learned: "..."
+  working_on: "..."
+  hard_won_principle: "..."
+battle_tested_principles:
+  - "..."
+judge_calibration: "..."
+```
+
+**區塊 E：Battle Archive Entry**
+
+輸出要 append 到 .battle_archive.md 的完整 markdown 內容：
+
+```markdown
+## Session {N} — {日期} — 主題：{topic}
+
+### 戰果
+- 勝方：{winner}
+- 紅隊提出 X 個 finding，白隊修復 Y 個，未解決 Z 個
+
+### Insights
+{top_insights + techniques_discovered + recurring_patterns}
+
+### 完整 Findings & Fixes
+{所有回合的 finding + fix 完整紀錄}
+
+### Insights Report
+{完整 Insights Report YAML}
+```
+
+## Quality Gate（自我檢查）
+
+- [ ] 覆核了每一個 finding，沒有遺漏
+- [ ] 每個 white_fixed: true 都附了親自驗證的證據（檔案 + 行號）
+- [ ] 至少嘗試找出 1 個紅白雙方都漏掉的問題
+- [ ] Insights Report 的 top_insights 不是 finding 的複製貼上
+- [ ] Battle Memory 更新後不超過 ~30 行
+- [ ] Battle Archive entry 格式完整
+
+**最後必須附上 Challenger Checkpoint：**
+
+```yaml
+# CHALLENGER CHECKPOINT
+depth_honest_assessment: "..."
+missed_opportunities: "..."
+could_do_better: "..."
+scoreboard_response: "N/A — 終審階段"
+historical_awareness: "..."
+```
+```
 
