@@ -24,7 +24,11 @@
     "learning-output-style@claude-plugins-official": true,
     "rust-analyzer-lsp@claude-plugins-official": true,
     "skill-creator@claude-plugins-official": true,
-    "squad@my-env": true
+    "semgrep@claude-plugins-official": true,
+    "serena@claude-plugins-official": false,
+    "qodo-skills@claude-plugins-official": true,
+    "squad@my-env": true,
+    "misc@my-env": true
   },
   "extraKnownMarketplaces": {
     "my-env": {
@@ -33,5 +37,39 @@
         "url": "https://github.com/EndeavorYen/claude-env.git"
       }
     }
+  },
+  "autoUpdatesChannel": "latest",
+  "effortLevel": "max",
+  "permissions": {
+    "allow": [
+      "Bash(*)",
+      "Read",
+      "Write",
+      "Edit",
+      "Glob",
+      "Grep",
+      "WebFetch",
+      "WebSearch",
+      "TodoWrite",
+      "NotebookEdit",
+      "Agent",
+      "Skill",
+      "mcp__serena__*",
+      "mcp__plugin_context7_context7__*",
+      "mcp__plugin_greptile_greptile__*",
+      "mcp__plugin_playwright_playwright__*"
+    ],
+    "deny": [
+      "Bash(rm:*)",
+      "Bash(rmdir:*)",
+      "Bash(del:*)",
+      "Bash(Remove-Item:*)",
+      "Bash(*rm -rf*)",
+      "Bash(*rm -r *)",
+      "Bash(*rm -f *)",
+      "Bash(*| rm *)",
+      "Bash(*&& rm *)",
+      "Bash(*; rm *)"
+    ]
   }
 }

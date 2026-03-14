@@ -25,125 +25,31 @@ uvx --version
 
 ## Step 2：全域設定
 
-### 2a. `~/.claude/settings.json`
+### 使用 install.sh 一鍵設定
 
-整個檔案貼上：
-
-```json
-{
-  "enabledPlugins": {
-    "frontend-design@claude-plugins-official": true,
-    "context7@claude-plugins-official": true,
-    "code-review@claude-plugins-official": true,
-    "github@claude-plugins-official": true,
-    "feature-dev@claude-plugins-official": true,
-    "code-simplifier@claude-plugins-official": true,
-    "ralph-loop@claude-plugins-official": true,
-    "playwright@claude-plugins-official": true,
-    "commit-commands@claude-plugins-official": true,
-    "security-guidance@claude-plugins-official": true,
-    "pr-review-toolkit@claude-plugins-official": true,
-    "claude-md-management@claude-plugins-official": true,
-    "agent-sdk-dev@claude-plugins-official": true,
-    "claude-code-setup@claude-plugins-official": true,
-    "plugin-dev@claude-plugins-official": true,
-    "explanatory-output-style@claude-plugins-official": true,
-    "greptile@claude-plugins-official": true,
-    "hookify@claude-plugins-official": true,
-    "learning-output-style@claude-plugins-official": true,
-    "skill-creator@claude-plugins-official": true,
-    "squad@my-env": true,
-    "superpowers@claude-plugins-official": true,
-    "misc@my-env": true,
-    "semgrep@claude-plugins-official": true,
-    "serena@claude-plugins-official": false,
-    "qodo-skills@claude-plugins-official": true
-  },
-  "extraKnownMarketplaces": {
-    "my-env": {
-      "source": {
-        "source": "git",
-        "url": "https://github.com/EndeavorYen/claude-env.git"
-      }
-    }
-  },
-  "autoUpdatesChannel": "latest",
-  "effortLevel": "max",
-  "permissions": {
-    "allow": [
-      "Bash(*)",
-      "Read",
-      "Write",
-      "Edit",
-      "Glob",
-      "Grep",
-      "WebFetch",
-      "WebSearch",
-      "TodoWrite",
-      "NotebookEdit",
-      "mcp__serena__*",
-      "mcp__plugin_context7_context7__*",
-      "mcp__plugin_playwright_playwright__*"
-    ],
-    "deny": [
-      "Bash(rm -rf *)",
-      "Bash(rm -r *)",
-      "Bash(rmdir *)",
-      "Bash(del *)",
-      "Bash(rd *)"
-    ]
-  }
-}
+```bash
+git clone https://github.com/EndeavorYen/claude-env.git
+cd claude-env
+bash install.sh setup
 ```
 
-### 2b. `~/.claude/settings.local.json`
+這會自動完成：
+- 設定 git HTTPS
+- 註冊 umbrella marketplace
+- 還原 `~/.claude/settings.json`（含完整 permissions）
+- 安裝 custom plugins（squad, misc）
 
-整個檔案貼上：
+### settings.json 包含什麼
 
-```json
-{
-  "permissions": {
-    "allow": [
-      "Bash(*)",
-      "Read",
-      "Write",
-      "Edit",
-      "Glob",
-      "Grep",
-      "WebFetch",
-      "WebSearch",
-      "NotebookEdit",
-      "Agent",
-      "TodoWrite",
-      "Skill",
-      "mcp__plugin_context7_context7__*",
-      "mcp__plugin_playwright_playwright__*",
-      "mcp__serena__*"
-    ],
-    "deny": [
-      "Bash(rm:*)",
-      "Bash(rmdir:*)",
-      "Bash(del:*)",
-      "Bash(Remove-Item:*)",
-      "Bash(*rm -rf*)",
-      "Bash(*rm -r *)",
-      "Bash(*rm -f *)",
-      "Bash(*| rm *)",
-      "Bash(*&& rm *)",
-      "Bash(*; rm *)"
-    ]
-  }
-}
-```
-
-### 為什麼有兩個檔案？
-
-| 檔案 | 差異 |
+| 區塊 | 內容 |
 |------|------|
-| `settings.json` | plugins + marketplace + 偏好 + 基本權限 |
-| `settings.local.json` | 補充 `Agent`、`Skill` 權限 + 更完整的刪除防護（含管道組合） |
+| `enabledPlugins` | 26 個 official plugin 啟用 + serena 停用（改用 .mcp.json）+ 2 個 custom |
+| `permissions.allow` | Bash、Read、Write、Edit、Glob、Grep、WebFetch、WebSearch、TodoWrite、NotebookEdit、Agent、Skill + MCP 工具 |
+| `permissions.deny` | 完整的刪除防護（含管道組合 `*\| rm *`、`*&& rm *`、`*; rm *` 等） |
+| `autoUpdatesChannel` | latest |
+| `effortLevel` | max |
 
-兩邊的 permissions 會**合併**，不會互相覆蓋。
+**permissions 的唯一 source of truth 是 `settings.json`**。不需要另外維護 `settings.local.json`。所有權限（包括 Agent、Skill、完整的 deny 規則）都已合併在這一個檔案裡。
 
 ---
 
@@ -151,7 +57,15 @@ uvx --version
 
 以下在專案根目錄操作。
 
-### 3a. `.mcp.json`（Serena MCP Server）
+### 3a. `.mcp.json`（MCP Server 設定）
+
+從 claude-env repo 複製範本：
+
+```bash
+cp ~/claude-env/mcp.template.json /path/to/project/.mcp.json
+```
+
+或手動建立：
 
 ```json
 {
@@ -226,7 +140,7 @@ fixed_tools: []
 |------|------|---------|
 | Serena | `find_symbol` 搜一個已知的 class/function | 返回檔案位置和定義 |
 | Context7 | 問一個 library 文件問題 | 自動查詢最新文件 |
-| 權限 | 隨便用幾個工具（Read、Bash、Edit） | 全部免確認 |
+| 權限 | 隨便用幾個工具（Read、Bash、Edit、Agent） | 全部免確認 |
 
 全部通過 = 設定完成。
 
@@ -245,11 +159,20 @@ Plugin 安裝 → mcp__plugin_serena_serena__*
 
 前綴錯 = 每次呼叫都要手動確認，跟沒設權限一樣。
 
-### settings.json vs settings.local.json
+### Config Topology
 
-- 兩邊的 allow/deny **合併**，不是覆蓋
-- Plugin 只能在 `settings.json` 裡設
-- `settings.local.json` 不進版控，適合放機器特有的東西
+```
+全域層（本 repo 管理）
+  ~/.claude/settings.json     ← install.sh 還原，permissions 唯一 source of truth
+
+專案層（各專案自己管）
+  <project>/.mcp.json         ← MCP server 設定，可能含 tokens，不進版控
+  <project>/.serena/          ← Serena 專案設定 + memories
+```
+
+- **permissions 全部在 settings.json** — 不需要 settings.local.json
+- **MCP 設定在各專案的 .mcp.json** — 用 mcp.template.json 作為起點
+- settings.json 和 settings.local.json 的 permissions 會**合併**，但為了避免分裂，我們把所有規則集中在 settings.json
 
 ### Serena 靜默失敗
 

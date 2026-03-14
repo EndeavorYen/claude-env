@@ -1,0 +1,12 @@
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# MCP server configs (project-level, may contain tokens)
+# Use mcp.template.json (tracked) as the token-free starting point
+.mcp.json
+
+# Battle memory files (tracked — cross-session team wisdom)
+# .battle_memory.yaml → agent memory, ~30 lines
+# .battle_archive.md → human archive, full session records
