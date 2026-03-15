@@ -88,7 +88,7 @@ function listDaemonSockets() {
     // Named pipes aren't in filesystem; probe pipes for known targets from pages cache
     try {
       const cached = JSON.parse(readFileSync(PAGES_CACHE, 'utf8'));
-      return (cached.pages || []).map(p => ({
+      return (Array.isArray(cached) ? cached : cached.pages || []).map(p => ({
         targetId: p.targetId,
         socketPath: sockPath(p.targetId),
       }));
