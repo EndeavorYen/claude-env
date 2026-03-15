@@ -500,6 +500,58 @@ async function consoleStr(consoleBuf, exceptionBuf, lastReadSeq, flag) {
   return lines.join('\n');
 }
 
+async function summaryStr(cdp, sid, consoleBuf, exceptionBuf) {
+  const expr = `
+    (function() {
+      const counts = {};
+      const interactive = document.querySelectorAll('a, button, input, select, textarea, [role="button"], [tabindex]');
+      for (const el of interactive) {
+        const tag = el.tagName.toLowerCase();
+        const type = tag === 'input' ? 'input[' + (el.type || 'text') + ']' : tag;
+        counts[type] = (counts[type] || 0) + 1;
+      }
+      const focused = document.activeElement;
+      const focusDesc = focused && focused !== document.body
+        ? '<' + focused.tagName.toLowerCase() + (focused.id ? '#' + focused.id : '') + (focused.className ? '.' + focused.className.toString().split(' ')[0] : '') + '>'
+        : 'none';
+      return {
+        title: document.title,
+        url: window.location.href,
+        viewport: window.innerWidth + 'x' + window.innerHeight,
+        scrollY: Math.round(window.scrollY),
+        scrollMax: Math.round(document.documentElement.scrollHeight - window.innerHeight),
+        counts,
+        focused: focusDesc,
+      };
+    })()
+  `;
+  const result = await evalStr(cdp, sid, expr);
+  const r = JSON.parse(result);
+  const lines = [];
+  lines.push(`Title: ${r.title}`);
+  lines.push(`URL: ${r.url}`);
+  lines.push(`Viewport: ${r.viewport}`);
+
+  const countParts = Object.entries(r.counts).map(([k, v]) => `${v} ${k}`);
+  lines.push(`Interactive: ${countParts.length > 0 ? countParts.join(', ') : 'none found'}`);
+
+  lines.push(`Focused: ${r.focused}`);
+
+  const scrollPct = r.scrollMax > 0 ? Math.round(r.scrollY / r.scrollMax * 100) + '%' : 'no scroll';
+  lines.push(`Scroll: ${r.scrollY} / ${r.scrollY + r.scrollMax} (${scrollPct})`);
+
+  const errors = consoleBuf.all().filter(e => e.level === 'error').length;
+  const warnings = consoleBuf.all().filter(e => e.level === 'warning' || e.level === 'warn').length;
+  const exceptions = exceptionBuf.all().length;
+  const parts = [];
+  if (errors > 0) parts.push(`${errors} error${errors > 1 ? 's' : ''}`);
+  if (warnings > 0) parts.push(`${warnings} warning${warnings > 1 ? 's' : ''}`);
+  if (exceptions > 0) parts.push(`${exceptions} exception${exceptions > 1 ? 's' : ''}`);
+  lines.push(`Console: ${parts.length > 0 ? parts.join(', ') : 'clean'}`);
+
+  return lines.join('\n');
+}
+
 // Click element by CSS selector
 async function clickStr(cdp, sid, selector) {
   if (!selector) throw new Error('CSS selector required');
@@ -687,6 +739,7 @@ async function runDaemon(targetId) {
         case 'net': case 'network': result = await netStr(cdp, sessionId); break;
         case 'status': result = await statusStr(cdp, sessionId, consoleBuf, exceptionBuf, navBuf, lastReadSeq); break;
         case 'console': result = await consoleStr(consoleBuf, exceptionBuf, lastReadSeq, args[0]); break;
+        case 'summary': result = await summaryStr(cdp, sessionId, consoleBuf, exceptionBuf); break;
         case 'click': result = await clickStr(cdp, sessionId, args[0]); break;
         case 'clickxy': result = await clickXyStr(cdp, sessionId, args[0], args[1]); break;
         case 'type': result = await typeStr(cdp, sessionId, args[0]); break;
@@ -871,6 +924,7 @@ Usage: cdp <command> [args]
   nav   <target> <url>              Navigate to URL and wait for load completion
   status <target>                    Page state + new console/exception entries (primary debug entry point)
   console <target> [--all|--errors] Console buffer (default: new entries only; --all: last 200; --errors: errors+exceptions)
+  summary <target>                  Token-efficient page overview (interactive elements, scroll, console health)
   net   <target>                    Network performance entries
   click   <target> <selector>       Click an element by CSS selector
   clickxy <target> <x> <y>          Click at CSS pixel coordinates (see coordinate note below)
@@ -917,7 +971,7 @@ DAEMON IPC (for advanced use / scripting)
 
 const NEEDS_TARGET = new Set([
   'snap','snapshot','eval','shot','screenshot','html','nav','navigate',
-  'net','network','click','clickxy','type','loadall','evalraw','status','console',
+  'net','network','click','clickxy','type','loadall','evalraw','status','console','summary',
 ]);
 
 async function main() {
