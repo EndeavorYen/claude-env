@@ -15,13 +15,14 @@ claude-env (this repo)          ← monorepo：plugin 原始碼 + 環境設定
     │
     ├── plugins/                ← 所有自己開發的 plugin
     │   ├── squad/              (agent team orchestrator)
-    │   └── misc/               (miscellaneous skills/commands)
+    │   ├── misc/               (miscellaneous skills/commands)
+    │   └── battle/             (red-white adversarial quality battle)
     │
     ├── .claude-plugin/
     │   └── marketplace.json    ← 指向 plugins/ 子目錄（相對路徑）
     │
     ├── settings.json           ← 完整環境快照
-    │   ├── enabledPlugins      (26 official enabled + 1 disabled + 2 custom)
+    │   ├── enabledPlugins      (26 official enabled + 1 disabled + 3 custom)
     │   ├── extraKnownMarketplaces
     │   ├── permissions         (allow/deny — 權限的唯一 source of truth)
     │   ├── autoUpdatesChannel

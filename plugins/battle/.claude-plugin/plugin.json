@@ -1,0 +1,9 @@
+{
+  "name": "battle",
+  "version": "0.1.0",
+  "description": "Red-White adversarial quality battle for codebase improvement",
+  "author": {
+    "name": "EndeavorYen"
+  },
+  "commands": ["./commands/"]
+}

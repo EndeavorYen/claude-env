@@ -163,6 +163,7 @@ if [ "$MODE" = "setup" ]; then
   log "Installing custom plugins..."
   claude plugin install squad@my-env --scope user || fail "Failed to install squad@my-env"
   claude plugin install misc@my-env --scope user || fail "Failed to install misc@my-env"
+  claude plugin install battle@my-env --scope user || fail "Failed to install battle@my-env"
 
   # 5. Deploy MCP template
   STEP=5
@@ -208,6 +209,7 @@ elif [ "$MODE" = "sync" ]; then
   log "Syncing custom plugins..."
   claude plugin install squad@my-env --scope user || fail "Failed to install squad@my-env"
   claude plugin install misc@my-env --scope user || fail "Failed to install misc@my-env"
+  claude plugin install battle@my-env --scope user || fail "Failed to install battle@my-env"
 
   # 4. Deploy MCP template
   STEP=4
@@ -228,7 +230,7 @@ echo "=== Done! ==="
 echo ""
 echo "  Mode             : $MODE"
 echo "  Official plugins : 26 enabled + 1 disabled (serena — use .mcp.json instead)"
-echo "  Custom plugins   : squad, misc (from my-env marketplace)"
+echo "  Custom plugins   : squad, misc, battle (from my-env marketplace)"
 echo "  Settings         : permissions, effortLevel, autoUpdatesChannel"
 echo "  MCP template     : ~/.claude/mcp.template.json"
 echo ""

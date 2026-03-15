@@ -28,7 +28,8 @@
     "serena@claude-plugins-official": false,
     "qodo-skills@claude-plugins-official": true,
     "squad@my-env": true,
-    "misc@my-env": true
+    "misc@my-env": true,
+    "battle@my-env": true
   },
   "extraKnownMarketplaces": {
     "my-env": {

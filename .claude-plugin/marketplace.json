@@ -13,6 +13,11 @@
       "name": "misc",
       "source": "./plugins/misc",
       "description": "Personal miscellaneous skills and commands"
+    },
+    {
+      "name": "battle",
+      "source": "./plugins/battle",
+      "description": "Red-White adversarial quality battle for codebase improvement"
     }
   ]
 }

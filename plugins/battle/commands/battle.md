@@ -11,7 +11,7 @@ arguments:
 
 # /battle — 紅白隊攻防比賽
 
-執行一場完整的紅白對抗。參照 `docs/against_rule.md` 的完整協議。
+執行一場完整的紅白對抗。參照 `${CLAUDE_PLUGIN_ROOT}/docs/against_rule.md` 的完整協議。
 
 ## 你的角色
 
@@ -24,7 +24,7 @@ arguments:
 
 1. 讀取專案根目錄的 `.battle_memory.yaml`（如存在，否則視為首場）
 2. 計算 session number = `record.total + 1`（首場 = 1）
-3. 讀取 `docs/against_rule.md` 取得完整協議內容（Role 定義、Persona、Communication Format 等）
+3. 讀取 `${CLAUDE_PLUGIN_ROOT}/docs/against_rule.md` 取得完整協議內容（Role 定義、Persona、Communication Format 等）
 4. 建立 `.battle_state.yaml`：
 
 ```yaml
@@ -37,9 +37,9 @@ max_rounds: {rounds 參數，預設 3}
 
 Spawn 一個獨立 agent 作為 JUDGE，prompt 組裝方式：
 
-1. 從 `docs/against_rule.md` 提取 `Role: JUDGE` 的 **Persona** 全文
+1. 從 `${CLAUDE_PLUGIN_ROOT}/docs/against_rule.md` 提取 `Role: JUDGE` 的 **Persona** 全文
 2. 注入 `.battle_memory.yaml` 完整內容（首場寫「這是首場對抗，無歷史記錄。」）
-3. 注入 `docs/against_rule.md` 的 **Topic Bank** 作為選題參考
+3. 注入 `${CLAUDE_PLUGIN_ROOT}/docs/against_rule.md` 的 **Topic Bank** 作為選題參考
 4. 指示 JUDGE 分析專案現狀（目錄結構、git log、CLAUDE.md），輸出開場 YAML
 5. 收到 JUDGE 輸出後，將 `topic`, `scope`, `dimensions` 寫入 `.battle_state.yaml`
 
@@ -50,7 +50,7 @@ Spawn 一個獨立 agent 作為 JUDGE，prompt 組裝方式：
 **3a. RED ATTACK** — Spawn 獨立 agent 作為 RED
 
 組裝 prompt：
-- 從 `docs/against_rule.md` 提取 `Role: RED` 的 **Persona** 全文
+- 從 `${CLAUDE_PLUGIN_ROOT}/docs/against_rule.md` 提取 `Role: RED` 的 **Persona** 全文
 - 注入：topic, scope, dimensions
 - 注入：record, red_growth, battle_tested_principles（從 memory）
 - 根據 `record.streak` 動態生成敘事壓力（見協議的「記憶如何驅動競爭」）
@@ -66,7 +66,7 @@ Spawn 一個獨立 agent 作為 JUDGE，prompt 組裝方式：
 **3b. WHITE DEFEND** — Spawn 獨立 agent 作為 WHITE
 
 組裝 prompt：
-- 從 `docs/against_rule.md` 提取 `Role: WHITE` 的 **Persona** 全文
+- 從 `${CLAUDE_PLUGIN_ROOT}/docs/against_rule.md` 提取 `Role: WHITE` 的 **Persona** 全文
 - 注入：topic, scope, dimensions
 - 注入：record, white_growth, battle_tested_principles（從 memory）
 - 根據 `record.streak` 動態生成敘事壓力
@@ -102,7 +102,7 @@ Spawn 一個獨立 agent 作為 JUDGE，prompt 組裝方式：
 
 Spawn 獨立 agent 作為 JUDGE（終審），prompt 組裝方式：
 
-1. 從 `docs/against_rule.md` 提取 `Role: JUDGE` 的 **Persona** 全文
+1. 從 `${CLAUDE_PLUGIN_ROOT}/docs/against_rule.md` 提取 `Role: JUDGE` 的 **Persona** 全文
 2. 注入 `.battle_state.yaml` 的完整內容（所有回合的 findings + fixes + scoreboard）
 3. 注入 `.battle_memory.yaml` 的完整內容
 4. 注入終審流程（跑測試 → 覆核 review finding → 獨立掃描 → 勝負判定）
@@ -151,4 +151,4 @@ Spawn 獨立 agent 作為 JUDGE（終審），prompt 組裝方式：
 
 - 如果任何角色 agent spawn 失敗，記錄錯誤並跳到 Step 5 清理
 - 如果 `.battle_state.yaml` 已存在（上場未正常結束），先刪除再開始
-- 如果 `docs/against_rule.md` 不存在，報錯並退出
+- 如果 `${CLAUDE_PLUGIN_ROOT}/docs/against_rule.md` 不存在，報錯並退出

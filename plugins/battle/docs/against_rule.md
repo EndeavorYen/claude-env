@@ -882,7 +882,7 @@ Main Loop 是最外層的 loop 指令 prompt，負責反覆觸發比賽。
 
 1. 讀取 .battle_memory.yaml（如存在），取得 record.total 作為已完成場次數
 2. Spawn 一個 Battle Orchestrator agent，給它以下指令：
-   「執行一場完整的紅白隊攻防比賽。參照 docs/against_rule.md 的 Execution Architecture 和 Prompt Templates。」
+   「執行一場完整的紅白隊攻防比賽。參照 ${CLAUDE_PLUGIN_ROOT}/docs/against_rule.md 的 Execution Architecture 和 Prompt Templates。」
 3. 等待 Orchestrator 完成，收到一行摘要（格式：「Session N: {topic} — winner: {RED|WHITE}」）
 4. 將所有變更 commit：
    git add -A && git commit -m "battle(session-N): {topic} — winner: {RED|WHITE}"
@@ -1187,7 +1187,7 @@ historical_awareness: "..."
 **你只能修改以下範圍內的檔案：** {scope}
 
 以下檔案**禁止修改**：
-- docs/against_rule.md（本協議文件）
+- ${CLAUDE_PLUGIN_ROOT}/docs/against_rule.md（本協議文件）
 - .battle_state.yaml
 - .battle_memory.yaml
 - .battle_archive.md
