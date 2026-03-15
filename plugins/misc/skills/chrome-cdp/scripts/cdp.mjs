@@ -620,6 +620,45 @@ async function scrollStr(cdp, sid, direction, amount) {
   return `Scrolled by (${dx}, ${dy}). Position: (${pos.x}, ${pos.y})`;
 }
 
+async function hoverStr(cdp, sid, selector) {
+  if (!selector) throw new Error('CSS selector required');
+  const expr = `
+    (function() {
+      const el = document.querySelector(${JSON.stringify(selector)});
+      if (!el) return { ok: false, error: 'Element not found: ' + ${JSON.stringify(selector)} };
+      el.scrollIntoView({ block: 'center', inline: 'center' });
+      const rect = el.getBoundingClientRect();
+      return { ok: true, x: rect.x + rect.width / 2, y: rect.y + rect.height / 2, tag: el.tagName };
+    })()
+  `;
+  const result = await evalStr(cdp, sid, expr);
+  const r = JSON.parse(result);
+  if (!r.ok) throw new Error(r.error);
+  await cdp.send('Input.dispatchMouseEvent', { x: r.x, y: r.y, type: 'mouseMoved', button: 'none', modifiers: 0 }, sid);
+  return `Hovering over <${r.tag}> at CSS (${Math.round(r.x)}, ${Math.round(r.y)})`;
+}
+
+async function waitForStr(cdp, sid, selector, timeoutMs = 10000) {
+  if (!selector) throw new Error('CSS selector required');
+  const timeout = Math.min(Math.max(parseInt(timeoutMs) || 10000, 500), 30000);
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    const found = await evalStr(cdp, sid, `
+      (function() {
+        const el = document.querySelector(${JSON.stringify(selector)});
+        if (!el) return null;
+        return { tag: el.tagName, text: el.textContent.trim().substring(0, 80) };
+      })()
+    `);
+    if (found !== 'null' && found !== '') {
+      const r = JSON.parse(found);
+      return `Found <${r.tag}> "${r.text}"`;
+    }
+    await sleep(200);
+  }
+  throw new Error(`Timeout: "${selector}" not found within ${timeout}ms`);
+}
+
 // Load-more: repeatedly click a button/selector until it disappears
 async function loadAllStr(cdp, sid, selector, intervalMs = 1500) {
   if (!selector) throw new Error('CSS selector required');
@@ -775,6 +814,8 @@ async function runDaemon(targetId) {
         case 'type': result = await typeStr(cdp, sessionId, args[0]); break;
         case 'press': result = await pressStr(cdp, sessionId, args[0]); break;
         case 'scroll': result = await scrollStr(cdp, sessionId, args[0], args[1]); break;
+        case 'hover': result = await hoverStr(cdp, sessionId, args[0]); break;
+        case 'waitfor': result = await waitForStr(cdp, sessionId, args[0], args[1]); break;
         case 'loadall': result = await loadAllStr(cdp, sessionId, args[0], args[1] ? parseInt(args[1]) : 1500); break;
         case 'evalraw': result = await evalRawStr(cdp, sessionId, args[0], args[1]); break;
         case 'stop': return { ok: true, result: '', stopAfter: true };
@@ -964,6 +1005,8 @@ Usage: cdp <command> [args]
                                     Works in cross-origin iframes unlike eval-based approaches
   press   <target> <key>           Press key (Enter, Tab, Escape, Backspace, Space, Arrow*)
   scroll  <target> <dir|x,y> [px]  Scroll page (down/up/left/right or x,y offset; default 500px)
+  hover   <target> <selector>       Hover over element (triggers :hover, tooltips, dropdowns)
+  waitfor <target> <selector> [ms]  Wait for element to appear (default 10000ms, max 30s)
   loadall <target> <selector> [ms]  Repeatedly click a "load more" button until it disappears
                                     Optional interval in ms between clicks (default 1500)
   evalraw <target> <method> [json]  Send a raw CDP command; returns JSON result
@@ -1005,7 +1048,7 @@ DAEMON IPC (for advanced use / scripting)
 
 const NEEDS_TARGET = new Set([
   'snap','snapshot','eval','shot','screenshot','html','nav','navigate',
-  'net','network','click','clickxy','type','press','scroll','loadall','evalraw','status','console','summary',
+  'net','network','click','clickxy','type','press','scroll','hover','waitfor','loadall','evalraw','status','console','summary',
 ]);
 
 async function main() {
