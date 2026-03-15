@@ -666,28 +666,22 @@ async function waitForStr(cdp, sid, selector, timeoutMs = 10000) {
 async function fillStr(cdp, sid, selector, text) {
   if (!selector) throw new Error('CSS selector required');
   if (text == null) throw new Error('Text required');
+  // Focus via JS (more reliable than mouse events for input focus) + get element info
   const expr = `
     (function() {
       const el = document.querySelector(${JSON.stringify(selector)});
       if (!el) return { ok: false, error: 'Element not found: ' + ${JSON.stringify(selector)} };
       el.scrollIntoView({ block: 'center', inline: 'center' });
-      const rect = el.getBoundingClientRect();
-      return { ok: true, x: rect.x + rect.width / 2, y: rect.y + rect.height / 2, tag: el.tagName };
+      el.focus();
+      el.value = '';
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      return { ok: true, tag: el.tagName };
     })()
   `;
   const result = await evalStr(cdp, sid, expr);
   const r = JSON.parse(result);
   if (!r.ok) throw new Error(r.error);
-  // Click to focus
-  const base = { x: r.x, y: r.y, button: 'left', clickCount: 1, modifiers: 0 };
-  await cdp.send('Input.dispatchMouseEvent', { ...base, type: 'mousePressed' }, sid);
-  await cdp.send('Input.dispatchMouseEvent', { ...base, type: 'mouseReleased' }, sid);
-  await sleep(50);
-  // Select all (Ctrl+A on Windows/Linux, Cmd+A on macOS)
-  const mod = process.platform === 'darwin' ? 4 : 2;
-  await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'a', code: 'KeyA', modifiers: mod, windowsVirtualKeyCode: 65 }, sid);
-  await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'a', code: 'KeyA', modifiers: 0, windowsVirtualKeyCode: 65 }, sid);
-  // Insert text (replaces selection)
+  // Insert text into the now-focused, cleared field
   await cdp.send('Input.insertText', { text }, sid);
   return `Filled <${r.tag}> with "${text.substring(0, 40)}${text.length > 40 ? '...' : ''}"`;
 }
@@ -791,12 +785,16 @@ async function stylesStr(cdp, sid, selector) {
 async function cookiesStr(cdp, sid) {
   const { cookies } = await cdp.send('Network.getCookies', {}, sid);
   if (!cookies || cookies.length === 0) return 'No cookies';
-  return cookies.map(c => {
-    const val = c.value.length > 40 ? c.value.substring(0, 40) + '...' : c.value;
+  // Dynamic column width based on actual cookie names
+  const nameW = Math.min(Math.max(...cookies.map(c => c.name.length)) + 2, 32);
+  const lines = [];
+  for (const c of cookies) {
+    const val = c.value.length > 30 ? c.value.substring(0, 30) + '...' : c.value;
     const flags = [c.httpOnly && 'HttpOnly', c.secure && 'Secure', c.sameSite].filter(Boolean).join(' ');
     const exp = c.expires > 0 ? new Date(c.expires * 1000).toISOString().slice(0, 19) : 'session';
-    return `${c.name.padEnd(24)} ${val.padEnd(44)} ${c.domain.padEnd(24)} ${exp.padEnd(20)} ${flags}`;
-  }).join('\n');
+    lines.push(`${c.name.padEnd(nameW)} ${val.padEnd(34)} ${c.domain.padEnd(20)} ${exp.padEnd(20)} ${flags}`);
+  }
+  return lines.join('\n');
 }
 
 // Load-more: repeatedly click a button/selector until it disappears
@@ -886,7 +884,8 @@ async function runDaemon(targetId) {
 
   cdp.onEvent('Runtime.exceptionThrown', (params) => {
     const detail = params.exceptionDetails;
-    const msg = detail?.text || detail?.exception?.description || 'Unknown error';
+    // exception.description has full message (e.g. "Error: foo"); text is just "Uncaught"
+    const msg = detail?.exception?.description || detail?.text || 'Unknown error';
     const stack = detail?.stackTrace?.callFrames?.[0];
     const file = stack?.url?.split('/').pop() || '';
     const loc = file && stack.lineNumber > 0 ? `${file}:${stack.lineNumber}` : '';
