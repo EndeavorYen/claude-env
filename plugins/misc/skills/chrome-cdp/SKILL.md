@@ -34,7 +34,8 @@ Captures the **viewport only**. Scroll first with `eval` if you need content bel
 ### Accessibility tree snapshot
 
 ```bash
-scripts/cdp.mjs snap <target>
+scripts/cdp.mjs snap <target>          # compact (default) — filters noise
+scripts/cdp.mjs snap <target> --full   # complete AX tree with all nodes
 ```
 
 ### Evaluate JavaScript
@@ -45,6 +46,18 @@ scripts/cdp.mjs eval <target> <expr>
 
 > **Watch out:** avoid index-based selection (`querySelectorAll(...)[i]`) across multiple `eval` calls when the DOM can change between them (e.g. after clicking Ignore, card indices shift). Collect all data in one `eval` or use stable selectors.
 
+### Page status & console
+
+The daemon buffers console output and exceptions in the background from the moment it starts. Use these commands to query the buffer.
+
+```bash
+scripts/cdp.mjs status  <target>                  # page state + new console/exception entries
+scripts/cdp.mjs summary <target>                  # token-efficient page overview (~100 tokens)
+scripts/cdp.mjs console <target> [--all|--errors] # console buffer (default: unread only)
+```
+
+> **Tip for agents:** Use `status` as your first command when debugging — it shows URL, title, and any console errors that have accumulated since the daemon started. Use `summary` for a quick page overview before deciding what to investigate.
+
 ### Other commands
 
 ```bash
@@ -54,6 +67,8 @@ scripts/cdp.mjs net     <target>               # resource timing entries
 scripts/cdp.mjs click   <target> <selector>    # click element by CSS selector
 scripts/cdp.mjs clickxy <target> <x> <y>       # click at CSS pixel coords
 scripts/cdp.mjs type    <target> <text>         # Input.insertText at current focus; works in cross-origin iframes unlike eval
+scripts/cdp.mjs press   <target> <key>         # press key (Enter, Tab, Escape, Backspace, Space, Arrow*)
+scripts/cdp.mjs scroll  <target> <dir|x,y> [px]  # scroll page (down/up/left/right; default 500px)
 scripts/cdp.mjs loadall <target> <selector> [ms]  # click "load more" until gone (default 1500ms between clicks)
 scripts/cdp.mjs evalraw <target> <method> [json]  # raw CDP command passthrough
 scripts/cdp.mjs open    [url]                  # open new tab (each triggers Allow prompt)
@@ -75,13 +90,18 @@ CSS px = screenshot image px / DPR
 - Prefer `snap --compact` over `html` for page structure.
 - Use `type` (not eval) to enter text in cross-origin iframes — `click`/`clickxy` to focus first, then `type`.
 - Chrome shows an "Allow debugging" modal once per tab on first access. A background daemon keeps the session alive so subsequent commands need no further approval. Daemons auto-exit after 20 minutes of inactivity.
+- `status` is the primary debug entry point — always start here. It shows buffered console errors without needing to "wait and capture".
+- Console entries are buffered from the moment the daemon starts. Use `console --errors` to quickly find JS errors.
 
 ## Source & Changelog
 
 **Upstream**: [pasky/chrome-cdp-skill](https://github.com/pasky/chrome-cdp-skill) (v1.0.1)
 
-**Local modifications** (2026-03-15):
-- **Windows support**: Added `%LOCALAPPDATA%` browser paths for Chrome, Edge, Brave, Chromium on Windows
-- **Named pipes**: Daemon IPC uses `\\.\pipe\cdp-<targetId>` on Windows instead of Unix sockets (`.sock`)
-- **Guard POSIX APIs**: `unlinkSync` on socket paths and `process.umask` skipped on `win32`
-- **Edge filter**: `edge://` internal pages excluded from `list` output (alongside `chrome://`)
+**Local modifications** (2026-03-16):
+- **Background observation**: Daemon buffers console output and exceptions from startup; `status`, `console`, `summary` commands query the buffer
+- **New commands**: `status` (primary debug entry point), `summary` (token-efficient overview), `console` (buffer query), `scroll`, `press` (keyboard events)
+- **snap --full flag**: Allow full (non-compact) accessibility tree output
+- **click upgrade**: Uses native CDP Input events instead of JS `.click()`
+- **DPR fix**: Simplified detection to JS-only
+- **Windows support**: `%LOCALAPPDATA%` browser paths, named pipes, POSIX guards
+- **Edge filter**: `edge://` internal pages excluded from `list`
