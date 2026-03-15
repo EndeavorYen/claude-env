@@ -416,6 +416,52 @@ async function netStr(cdp, sid) {
   ).join('\n');
 }
 
+async function statusStr(cdp, sid, consoleBuf, exceptionBuf, navBuf, lastReadSeq) {
+  let title = '', url = '';
+  try {
+    title = await evalStr(cdp, sid, 'document.title');
+    url = await evalStr(cdp, sid, 'window.location.href');
+  } catch {}
+
+  const lines = [];
+  lines.push(`URL: ${url}`);
+  lines.push(`Title: ${title}`);
+
+  const navs = navBuf.all();
+  if (navs.length > 1) {
+    const last = navs[navs.length - 1];
+    const ago = Math.round((Date.now() - last.ts) / 1000);
+    lines.push(`Last navigation: ${ago}s ago`);
+  }
+
+  const newConsole = consoleBuf.since(lastReadSeq.console);
+  const newExceptions = exceptionBuf.since(lastReadSeq.exception);
+
+  if (newConsole.length > 0) {
+    lines.push(`Console (${newConsole.length} new):`);
+    for (const e of newConsole.slice(-20)) {
+      const loc = e.loc ? ` (${e.loc})` : '';
+      lines.push(`  [${e.level}] ${e.text.substring(0, 200)}${loc}`);
+    }
+    if (newConsole.length > 20) lines.push(`  ... and ${newConsole.length - 20} more (use 'console --all')`);
+  } else {
+    lines.push('Console: (no new entries)');
+  }
+
+  if (newExceptions.length > 0) {
+    lines.push(`Exceptions (${newExceptions.length} new):`);
+    for (const e of newExceptions.slice(-10)) {
+      const loc = e.loc ? ` at ${e.loc}` : '';
+      lines.push(`  ${e.msg.substring(0, 200)}${loc}`);
+    }
+  }
+
+  lastReadSeq.console = consoleBuf.latest();
+  lastReadSeq.exception = exceptionBuf.latest();
+
+  return lines.join('\n');
+}
+
 // Click element by CSS selector
 async function clickStr(cdp, sid, selector) {
   if (!selector) throw new Error('CSS selector required');
@@ -601,6 +647,7 @@ async function runDaemon(targetId) {
         case 'html': result = await htmlStr(cdp, sessionId, args[0]); break;
         case 'nav': case 'navigate': result = await navStr(cdp, sessionId, args[0]); break;
         case 'net': case 'network': result = await netStr(cdp, sessionId); break;
+        case 'status': result = await statusStr(cdp, sessionId, consoleBuf, exceptionBuf, navBuf, lastReadSeq); break;
         case 'click': result = await clickStr(cdp, sessionId, args[0]); break;
         case 'clickxy': result = await clickXyStr(cdp, sessionId, args[0], args[1]); break;
         case 'type': result = await typeStr(cdp, sessionId, args[0]); break;
@@ -783,6 +830,7 @@ Usage: cdp <command> [args]
   shot  <target> [file]             Screenshot (default: screenshot-<target>.png in runtime dir); prints coordinate mapping
   html  <target> [selector]         Get HTML (full page or CSS selector)
   nav   <target> <url>              Navigate to URL and wait for load completion
+  status <target>                    Page state + new console/exception entries (primary debug entry point)
   net   <target>                    Network performance entries
   click   <target> <selector>       Click an element by CSS selector
   clickxy <target> <x> <y>          Click at CSS pixel coordinates (see coordinate note below)
@@ -829,7 +877,7 @@ DAEMON IPC (for advanced use / scripting)
 
 const NEEDS_TARGET = new Set([
   'snap','snapshot','eval','shot','screenshot','html','nav','navigate',
-  'net','network','click','clickxy','type','loadall','evalraw',
+  'net','network','click','clickxy','type','loadall','evalraw','status',
 ]);
 
 async function main() {
