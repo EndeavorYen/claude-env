@@ -413,10 +413,10 @@ async function statusStr(cdp, sid, consoleBuf, exceptionBuf, navBuf, lastReadSeq
   lines.push(`Title: ${title}`);
 
   const navs = navBuf.all();
-  if (navs.length > 1) {
+  if (navs.length > 0) {
     const last = navs[navs.length - 1];
     const ago = Math.round((Date.now() - last.ts) / 1000);
-    lines.push(`Last navigation: ${ago}s ago`);
+    lines.push(`Navigations: ${navs.length} (last ${ago}s ago)`);
   }
 
   const newConsole = consoleBuf.since(lastReadSeq.console);
@@ -522,8 +522,12 @@ async function summaryStr(cdp, sid, consoleBuf, exceptionBuf) {
 
   lines.push(`Focused: ${r.focused}`);
 
-  const scrollPct = r.scrollMax > 0 ? Math.round(r.scrollY / r.scrollMax * 100) + '%' : 'no scroll';
-  lines.push(`Scroll: ${r.scrollY} / ${r.scrollMax} max (${scrollPct})`);
+  if (r.scrollMax > 0) {
+    const pct = Math.round(r.scrollY / r.scrollMax * 100);
+    lines.push(`Scroll: ${r.scrollY} / ${r.scrollMax} max (${pct}%)`);
+  } else {
+    lines.push('Scroll: no scroll');
+  }
 
   const errors = consoleBuf.all().filter(e => e.level === 'error').length;
   const warnings = consoleBuf.all().filter(e => e.level === 'warning' || e.level === 'warn').length;
@@ -752,13 +756,23 @@ async function stylesStr(cdp, sid, selector) {
         'transform','transition','animation','cursor','pointer-events','user-select',
         'box-shadow','border-radius','outline',
       ];
+      const skip = new Set([
+        'none','normal','auto','0px','0','visible','static','content-box',
+        'start','baseline','inherit','default','clip','row','nowrap',
+        'rgb(0, 0, 0)','rgba(0, 0, 0, 0)',
+      ]);
+      const skipPatterns = [
+        /^0px /,              // 0px none rgb(...)  — default border etc.
+        /^rgba\\(0, ?0, ?0, ?0\\)/, // transparent backgrounds
+        /^0 [01]+ auto$/,     // flex: 0 1 auto
+        /none 0px$/,          // outline: rgb(...) none 0px — no outline
+        /^all$/,              // transition: all — browser default
+      ];
       for (const p of keep) {
         const v = cs.getPropertyValue(p);
-        if (v && v !== 'none' && v !== 'normal' && v !== 'auto' && v !== '0px' && v !== 'visible'
-            && v !== 'static' && v !== 'content-box' && v !== 'start' && v !== 'baseline'
-            && v !== 'inherit' && v !== 'default' && v !== 'rgb(0, 0, 0)') {
-          props[p] = v;
-        }
+        if (!v || skip.has(v)) continue;
+        if (skipPatterns.some(re => re.test(v))) continue;
+        props[p] = v;
       }
       return { tag: el.tagName, id: el.id, cls: el.className?.toString().substring(0, 80), props };
     })()
@@ -791,21 +805,23 @@ async function loadAllStr(cdp, sid, selector, intervalMs = 1500) {
   let clicks = 0;
   const deadline = Date.now() + 5 * 60 * 1000; // 5-minute hard cap
   while (Date.now() < deadline) {
-    const exists = await evalStr(cdp, sid,
-      `!!document.querySelector(${JSON.stringify(selector)})`
-    );
-    if (exists !== 'true') break;
-    const clickExpr = `
+    const expr = `
       (function() {
         const el = document.querySelector(${JSON.stringify(selector)});
-        if (!el) return false;
-        el.scrollIntoView({ block: 'center' });
-        el.click();
-        return true;
+        if (!el) return null;
+        el.scrollIntoView({ block: 'center', inline: 'center' });
+        const rect = el.getBoundingClientRect();
+        return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
       })()
     `;
-    const clicked = await evalStr(cdp, sid, clickExpr);
-    if (clicked !== 'true') break;
+    const result = await evalStr(cdp, sid, expr);
+    if (result === 'null' || result === '') break;
+    const r = JSON.parse(result);
+    const base = { x: r.x, y: r.y, button: 'left', clickCount: 1, modifiers: 0 };
+    await cdp.send('Input.dispatchMouseEvent', { ...base, type: 'mouseMoved' }, sid);
+    await cdp.send('Input.dispatchMouseEvent', { ...base, type: 'mousePressed' }, sid);
+    await sleep(50);
+    await cdp.send('Input.dispatchMouseEvent', { ...base, type: 'mouseReleased' }, sid);
     clicks++;
     await sleep(intervalMs);
   }
@@ -863,7 +879,8 @@ async function runDaemon(targetId) {
     const level = params.type || 'log';
     const text = (params.args || []).map(a => a.value ?? a.description ?? JSON.stringify(a)).join(' ');
     const stack = params.stackTrace?.callFrames?.[0];
-    const loc = stack ? `${stack.url.split('/').pop()}:${stack.lineNumber}` : '';
+    const file = stack?.url?.split('/').pop() || '';
+    const loc = file && stack.lineNumber > 0 ? `${file}:${stack.lineNumber}` : '';
     consoleBuf.push({ level, text, loc, ts: Date.now() });
   });
 
@@ -871,7 +888,8 @@ async function runDaemon(targetId) {
     const detail = params.exceptionDetails;
     const msg = detail?.text || detail?.exception?.description || 'Unknown error';
     const stack = detail?.stackTrace?.callFrames?.[0];
-    const loc = stack ? `${stack.url.split('/').pop()}:${stack.lineNumber}` : '';
+    const file = stack?.url?.split('/').pop() || '';
+    const loc = file && stack.lineNumber > 0 ? `${file}:${stack.lineNumber}` : '';
     exceptionBuf.push({ msg, loc, ts: Date.now() });
   });
 

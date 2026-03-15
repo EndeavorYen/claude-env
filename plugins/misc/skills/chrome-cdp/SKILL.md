@@ -99,6 +99,7 @@ CSS px = screenshot image px / DPR
 - Chrome shows an "Allow debugging" modal once per tab on first access. A background daemon keeps the session alive so subsequent commands need no further approval. Daemons auto-exit after 20 minutes of inactivity.
 - `status` is the primary debug entry point — always start here. It shows buffered console errors without needing to "wait and capture".
 - Console entries are buffered from the moment the daemon starts. Use `console --errors` to quickly find JS errors.
+- **Shell quoting**: CSS attribute selectors like `input[type=text]` contain shell metacharacters (`[`, `]`, `=`). Always wrap selectors in quotes: `click <t> 'input[type="text"]'`. This is a shell issue — when the agent calls commands via the daemon IPC (JSON), no quoting is needed.
 
 ## Workflow Patterns
 
