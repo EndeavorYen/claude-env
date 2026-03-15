@@ -29,9 +29,13 @@
 | RED | 「只找到幾個 minor issue，整體看起來不錯」 | 逃避深度分析，放棄攻擊方職責 |
 | RED | 三回合都只找同一層級的問題（如都是命名問題） | 沒有逐回合加深，浪費回合 |
 | RED | 複製貼上前回合的 finding 換個說法重新提交 | 灌水行為，不產生新價值 |
+| RED | 所有 finding 都用 `evidence_type: review`，沒寫任何測試 | 逃避驗證 — 可測試的問題必須用測試證明 |
+| RED | 寫的測試太淺（如只測 `assert True`） | 測試灌水 — 測試必須真正驗證問題存在 |
 | WHITE | 「已修復」但沒有附 diff 或具體修改內容 | 無法驗證是否真的修了 |
 | WHITE | 全部標記 `disputed` 而不實際修復 | 迴避工作，把裁決推給裁判 |
 | WHITE | 做大量 cosmetic 改動充當 proactive_improvements | 搶分行為，不產生實質價值 |
+| WHITE | 宣稱 `fixed` 但沒跑紅隊的測試確認 pass | 空口無憑 — test finding 必須附 test pass 輸出 |
+| WHITE | 刪除或修改紅隊的測試來讓它 pass | 作弊 — 紅隊的測試是不可修改的驗證標準 |
 | JUDGE | 「雙方表現都很好」然後直接判勝負 | 橡皮圖章，沒有獨立驗證 |
 | JUDGE | 不讀程式碼就接受白隊的 `fixed` 宣稱 | 失職，破壞整個機制的可信度 |
 | JUDGE | 選題過於空泛（如「提升整體品質」） | 紅白隊無法聚焦，對抗品質下降 |
@@ -171,12 +175,37 @@ insights_report: null            # Insights Report YAML
 ### Round Depth Escalation（回合深度遞進）
 
 每回合有明確的深度焦點，**禁止三回合都停留在同一層級**。
+紅隊的攻擊方式是**測試驅動探測 + 程式碼審查**的混合模式。
 
 | 回合 | 深度 | 紅隊焦點 | 白隊焦點 |
 |------|------|---------|---------|
-| Round 1 | **Surface** — 表面可見的問題 | 明顯的錯誤、違反慣例、缺失的基本要素 | 直接修復，補齊缺失 |
-| Round 2 | **Structural** — 結構性與設計層問題 | 隱藏的耦合、錯誤的抽象、可維護性隱患、Round 1 修復中的不徹底之處 | 重構或重新設計，不只是修補表面 |
-| Round 3 | **Excellence** — 卓越標準與邊界情況 | 極端情境、擴展性瓶頸、「能用但不夠好」的地方、整體一致性 | 打磨至專業標準，主動強化薄弱環節 |
+| Round 1 | **Surface** — 功能完整性與基本正確性 | **寫測試探測**：entry points 能跑嗎？宣稱的功能真的能用嗎？`NotImplementedError`、dead code path、基本功能壞掉 = critical | 修復到所有紅隊測試 pass + 補齊缺失 |
+| Round 2 | **Structural** — 錯誤處理與設計層問題 | **寫測試探測**：try-catch 有沒有吞錯誤？error path 有沒有正確處理？加上**程式碼審查**：隱藏的耦合、錯誤的抽象、Round 1 修復的不徹底之處 | 重構或重新設計 + 讓所有測試 pass |
+| Round 3 | **Excellence** — 邊界情況與壓力測試 | **寫測試探測**：edge case、race condition、極端輸入。加上**程式碼審查**：「能用但不夠好」的地方、整體一致性 | 打磨至專業標準 + 讓所有測試 pass |
+
+### 紅隊攻擊方式：測試驅動探測（Test-Driven Probing）
+
+紅隊不是寫完整測試套件 — 是像**滲透測試員**一樣精準探測。
+
+**為什麼用測試而不是只讀程式碼：**
+- 跑主流程可能需要 30 分鐘且 try-catch 吞掉所有錯誤 → 看起來「沒問題」但實際壞了
+- 針對性測試直接呼叫目標函式 → 秒級驗證，繞過主流程的 try-catch
+- failing test = 鐵證，白隊無法 dispute「這不是問題」
+- 測試留在 codebase → 每場比賽都在幫專案累積回歸測試
+
+**測試探測 vs 程式碼審查的適用場景：**
+
+| 適合寫測試探測 | 適合程式碼審查 |
+|-------------|--------------|
+| 功能壞掉（`NotImplementedError`、crash） | 架構耦合、設計問題 |
+| try-catch 靜默吞錯誤 | 命名/可讀性 |
+| 邊界情況、極端輸入 | 設計模式選擇 |
+| error propagation 不正確 | 文件品質 |
+| 效能瓶頸（benchmark test） | 流程改善 |
+
+**紅隊的每個 finding 必須標記攻擊方式：**
+- `evidence_type: test` — 附上 failing test 程式碼，白隊必須讓它 pass
+- `evidence_type: review` — 附上程式碼片段和分析，用於測試無法驗證的問題
 
 **紅隊最低 finding 要求：**
 - 每回合至少提出 **3 個 finding**，其中至少 **1 個 major 或以上**
@@ -236,7 +265,16 @@ findings:
     dimension: "對應裁判定義的維度"
     location: "檔案路徑:行號 或 概念位置"
     issue: "問題描述"
-    evidence: "具體證據（程式碼片段、邏輯推理、反例）"
+    evidence_type: test | review    # test = 附 failing test，review = 附程式碼分析
+    evidence: "具體證據"
+    # evidence_type: test 時，evidence 必須包含可執行的測試程式碼：
+    #   test_file: "tests/test_battle_r1.py"  # 紅隊寫入的測試檔案路徑
+    #   test_code: |                          # 完整的 failing test
+    #     def test_scan_not_implemented():
+    #         ...
+    #   run_command: "pytest tests/test_battle_r1.py::test_scan_not_implemented -v"
+    #   failure_output: "NotImplementedError: ..."  # 實際執行的失敗輸出
+    # evidence_type: review 時，evidence 包含程式碼片段、邏輯推理、反例
     suggested_direction: "建議改善方向（非具體解法，避免誤導白隊）"
 ```
 
@@ -248,7 +286,11 @@ fixes:
   - finding_id: "R1-01"            # 對應紅隊的 finding id
     status: fixed | disputed | deferred
     action: "具體做了什麼修改"
-    verification: "如何驗證修復有效（測試結果、前後對比、邏輯推理）"
+    verification: "如何驗證修復有效"
+    # evidence_type: test 的 finding → verification 必須包含：
+    #   test_result: pass           # 紅隊的測試現在 pass 了
+    #   run_output: "1 passed in 0.3s"  # 實際執行輸出
+    # evidence_type: review 的 finding → verification 用前後對比或邏輯推理
     # disputed 時必須附 dispute_reason
     # deferred 時必須附 defer_reason
 proactive_improvements:             # 白隊主動發現的強化項目
@@ -330,12 +372,158 @@ for_next_battle:                   # 更新到 Battle Memory 的內容
 ### Phase 0：選題
 
 1. 分析專案現狀（目錄結構、git log、CLAUDE.md、已知問題、技術債）
-2. 選擇專案**當前最能受益**的主題 — 不選已經做得很好的方向
+2. 參照下方 **Topic Bank** 選擇專案**當前最能受益**的主題 — 不選已經做得很好的方向
 3. 定義 3-5 個評分維度，每個維度必須：
    - 可觀察：能從程式碼/文件中找到具體證據
    - 可驗證：修復前後的差異是明確的
 4. 範圍要具體可執行 — 「讓整個專案更好」是無效主題
-5. 輸出開場 YAML
+5. 參照 `past_topics` 避免連續重複選題（除非上次暴露了未解決的深層問題）
+6. 輸出開場 YAML
+
+### Topic Bank（建議題庫）
+
+> **題庫是靈感來源，不是 checklist。**
+> 裁判應根據專案的語言、框架、領域特性，從題庫中汲取靈感後**自訂**最適合的主題。
+> 紅隊的攻擊方式不限於子題目描述的方向 — 在安全可行的範圍內自由發揮。
+>
+> 以下子題目是技術棧無關的通用方向。實際選題時，裁判應將它們轉化為
+> 該專案具體的問題。例如「資料驗證邊界」在 Python 專案可能是 type hint 覆蓋率，
+> 在 Go 專案可能是 interface 設計，在前端可能是 form validation。
+>
+> **每個子題目都有兩層深度：**
+> - **Layer 1（有沒有做到）**：功能是否存在、機制是否到位 → 適合 Round 1
+> - **Layer 2（做得好不好）**：品質是否達標、是否有更好的做法 → 適合 Round 2-3
+>
+> 紅隊 Round 1 找「缺失」，Round 2+ 找「不夠好」。
+
+| 類別 | 一句話概述 | 適合什麼階段的專案 |
+|------|---------|------------------|
+| **功能正確性** | entry points 可執行嗎？宣稱的功能真的能用嗎？ | 所有階段 |
+| **錯誤處理** | 錯誤有被處理嗎？處理得好嗎？ | 有一定複雜度的專案 |
+| **架構/設計** | 模組邊界清晰嗎？依賴方向合理嗎？ | 成長期專案 |
+| **安全性** | 輸入有驗證嗎？敏感資料有保護嗎？ | 有用戶輸入的專案 |
+| **效能** | 有不必要的重複計算或資源浪費嗎？ | 有效能需求的專案 |
+| **測試品質** | 測試真的在驗證行為嗎？ | 有測試的專案 |
+| **UI/UX** | 設計好不好？不只是能不能用 | 有前端的專案 |
+| **文件品質** | 文件和實際行為一致嗎？ | 有協作需求的專案 |
+| **DevOps/CI** | 部署可靠嗎？能回滾嗎？ | 有部署流程的專案 |
+| **設定一致性** | 設定統一管理嗎？預設值合理嗎？ | 多環境部署的專案 |
+| **型別安全** | 型別系統有被繞過嗎？ | TypeScript/typed 專案 |
+| **狀態管理** | 誰是 source of truth？有 race condition 嗎？ | 有複雜狀態的專案 |
+
+#### 1. 功能正確性
+
+- 所有對外入口（CLI command、API endpoint、UI action）是否真的可執行
+- 宣稱支援的功能是否有完整實作（vs `NotImplementedError` / TODO / pass）
+- 輸入輸出的契約是否與文件或 type signature 一致
+- 正常路徑之外的替代流程是否有處理（空輸入、無資料、首次使用）
+- 跨模組的功能串接是否端到端可通（vs 各模組單獨能跑但串不起來）
+- 版本升級或 migration 後的向後相容性是否保持
+
+#### 2. 錯誤處理
+
+- 錯誤是否被靜默吞掉（try-catch 裡只有 pass / log 但不處理）
+- 錯誤訊息是否對使用者有意義（vs 裸露的 stack trace 或空泛的 "Something went wrong"）
+- 錯誤是否正確向上傳播（vs 在中間層被截斷，呼叫者不知道失敗了）
+- 外部依賴失敗時的降級策略（API timeout、DB 斷線、檔案不存在）
+- 部分成功的情境處理（批次操作中途失敗時，已完成的部分如何處理）
+- 錯誤恢復路徑是否可測試（retry 邏輯、fallback 機制是否真的能觸發）
+
+#### 3. 架構/設計
+
+- 模組之間的依賴方向是否合理（有沒有底層依賴上層）
+- 抽象層級是否一致（同一層的函式有的處理 HTTP、有的處理 business logic）
+- 是否存在不必要的中間層或過度抽象（wrapper of wrapper）
+- 重複邏輯是否散落多處（相似但微妙不同的實作）
+- 模組邊界是否清晰（改一個功能需要動幾個不相關的檔案）
+- 資料流的轉換次數是否合理（同一份資料被 serialize/deserialize 幾次）
+- 擴展新功能時需要修改的檔案數量是否合理
+
+#### 4. 安全性
+
+- 使用者輸入是否在信任邊界進行驗證和清理
+- 敏感資料（密碼、token、API key）是否出現在 log、錯誤訊息、或版控中
+- 權限檢查是否在每個需要的地方都有執行（vs 只在入口檢查，內部繞過）
+- 第三方依賴是否有已知漏洞（供應鏈安全）
+- 序列化/反序列化是否存在注入風險
+- 認證狀態的時效性管理（session/token 過期、revocation）
+- 錯誤訊息是否洩漏系統內部資訊（路徑、版本、stack trace）
+
+#### 5. 效能
+
+- 是否存在不必要的重複計算（同一個結果在多處重新算而非快取）
+- 資料查詢是否有 N+1 問題（迴圈內逐筆查詢而非批次取得）
+- 大量資料處理時是否有串流/分頁機制（vs 全部載入記憶體）
+- 啟動時間是否合理（是否在啟動時做了不必要的初始化）
+- 是否有可以平行處理但卻循序執行的地方
+- 快取策略是否合理（該快取的沒快取、不該快取的快取了、invalidation 時機）
+- 資源是否正確釋放（連線、檔案 handle、暫存檔）
+
+#### 6. 測試品質
+
+- 測試是否真的在驗證行為（vs 只是呼叫函式但不 assert 結果）
+- 關鍵路徑的 edge case 是否有覆蓋（邊界值、空值、超大輸入）
+- mock 的範圍是否合理（過度 mock 導致測試和實際行為脫節）
+- 測試之間是否有隱性依賴（執行順序影響結果、共用全域狀態）
+- 測試失敗時的錯誤訊息是否能幫助定位問題（vs 只說 "AssertionError"）
+- 測試是否容易維護（改一個小功能要改多少測試）
+- 是否存在永遠 pass 的測試（條件永遠為 true、被 skip 但沒人知道）
+
+#### 7. UI/UX
+
+- 視覺設計品質 — 配色是否和諧、間距是否舒適、字體層次是否清晰（vs 看起來像工程師隨便拼的）
+- 元件設計水準 — 按鈕、表單、卡片等元件是否有精心設計（vs 框架預設樣式直接用、毫無修飾）
+- 整體設計一致性 — 跨頁面的色彩、圓角、陰影、動畫是否統一（vs 每個頁面像不同人做的）
+- 互動設計品質 — 操作流程是否流暢直覺、轉場是否自然、回饋是否即時且有意義
+- 資訊架構 — 使用者能否在 3 秒內找到目標功能（vs 藏在三層選單裡）
+- 空狀態與異常狀態設計 — 無資料、錯誤、loading 時是否有設計過的畫面（vs 空白或 raw error）
+- 設計細節的打磨程度 — hover 效果、focus 狀態、過渡動畫、icon 選用是否講究
+- 整體設計是否配得上產品定位（專業工具看起來像學生作業 = critical finding）
+
+#### 8. 文件品質
+
+- README 描述的功能是否與實際行為一致（vs 過時或只是初始模板）
+- 安裝/設定步驟是否能照著做到底（新人能否靠文件獨立跑起來）
+- API 文件的參數、回傳值、錯誤碼是否與實際行為一致
+- 程式碼中的註解是否還反映現況（vs 改了程式碼沒改註解）
+- 架構決策是否有記錄（為什麼選這個方案而不是那個）
+- 貢獻指南是否存在且實用（怎麼跑測試、怎麼提 PR、code style）
+
+#### 9. DevOps/CI
+
+- CI pipeline 是否涵蓋所有關鍵檢查（lint、type check、test、build）
+- 部署流程是否可重複且可預測（vs 依賴手動步驟或特定人的環境）
+- 失敗時的 rollback 機制是否存在且驗證過
+- 環境之間（dev / staging / prod）的差異是否被管理和記錄
+- pipeline 的執行時間是否合理（有沒有可以平行化或快取的步驟）
+- 部署後的健康檢查和監控告警是否到位
+
+#### 10. 設定一致性
+
+- 設定項是否有統一的來源（vs 散落在程式碼、環境變數、設定檔、hard-code 各處）
+- 預設值是否合理且有記錄（新人不看原始碼能否知道預設行為）
+- 敏感設定（secret、token）是否與一般設定分離管理
+- 不同環境的設定差異是否明確可追蹤（vs 部署時才發現 config 少了某個 key）
+- 設定變更是否需要重啟、是否支援 hot reload、是否有記錄
+- 設定項之間的依賴和互斥關係是否有驗證（設了 A 就必須設 B、C 和 D 不能同時開）
+
+#### 11. 型別安全
+
+- 是否存在繞過型別系統的寫法（any / as / type: ignore / 強制轉型）
+- 函式簽名是否準確反映實際行為（宣告回傳 string 但可能回傳 null）
+- 外部資料進入系統時是否有 runtime 型別驗證（API response、使用者輸入、檔案讀取）
+- 泛型的使用是否恰當（vs 所有地方都用 any 或 Object）
+- 型別定義是否與實際資料結構同步（改了 schema 沒改 type）
+- union type / optional 的窮舉處理是否完整（有沒有漏掉的 case）
+
+#### 12. 狀態管理
+
+- 同一份狀態是否有多個來源（哪個才是 source of truth）
+- 狀態更新的時序是否可預測（有沒有 race condition 或更新順序依賴）
+- 快取與來源的一致性如何維護（cache invalidation 策略）
+- 狀態是否有不必要的全域共享（vs 應該限縮在局部範圍）
+- 狀態的生命週期是否清晰（何時建立、何時更新、何時清除）
+- 並發修改同一狀態時的衝突處理機制
 
 ### Phase 1~N：沉默觀察
 
@@ -356,8 +544,11 @@ for_next_battle:                   # 更新到 Battle Memory 的內容
 ### Quality Gate（裁判產出最低標準）
 
 - [ ] 開場 YAML 的每個 dimension 都有具體的 description（不是「程式碼品質」這種空泛詞）
+- [ ] 已執行紅隊的測試套件（`pytest tests/test_battle_r*.py -v`），並記錄結果
+- [ ] 已確認白隊沒有修改或刪除紅隊的測試檔案
 - [ ] 終審覆核了**每一個** finding，沒有遺漏
-- [ ] 每個 `white_fixed: true` 的判定都附了你親自驗證的證據（讀了哪個檔案的哪一行）
+- [ ] test finding 的驗證以測試執行結果為準（pass/fail），不需人工判斷
+- [ ] review finding 的 `white_fixed: true` 判定都附了親自驗證的證據
 - [ ] 至少嘗試找出 1 個紅白雙方都漏掉的問題（即使最終真的找不到，也要說明嘗試了什麼）
 - [ ] Insights Report 已輸出，且 `top_insights` 不是 finding 的複製貼上，而是提煉出的 why
 - [ ] Battle Memory 的 insights 區塊已更新（新技巧、新反省、新 anti-pattern）
@@ -379,10 +570,24 @@ for_next_battle:                   # 更新到 Battle Memory 的內容
 
 ### 攻擊策略
 
+**第一步永遠是：寫測試探測，不是讀程式碼。**
+
+- **針對性測試優先** — 不跑 30 分鐘的主流程，直接 import 目標函式寫秒級測試
+  ```python
+  # 不要這樣（30 分鐘 + try-catch 吞錯誤）：
+  # python scripts/orchestrator.py --scan --top 5
+
+  # 要這樣（0.1 秒，直刺要害）：
+  def test_run_scan_exists():
+      pipeline = Pipeline(ticker="TEST")
+      # 如果這裡拋 NotImplementedError → critical finding
+      result = asyncio.run(pipeline.run_scan())
+  ```
 - **從高 severity 開始** — critical/major 比一堆 minor 更有價值
-- **每個 finding 必須有 evidence** — 不接受「感覺不太好」的主觀判斷
+- **測試能驗證的問題用 `evidence_type: test`** — failing test = 鐵證，白隊無法 dispute
+- **測試無法驗證的問題用 `evidence_type: review`** — 架構、設計、命名等用程式碼審查
 - **後續回合讀白隊的 Fix Report**，針對修復不完整、修復引入新問題、或 disputed 理由不充分的地方追擊
-- **檢查白隊的 proactive_improvements** — 主動改善也可能引入新問題
+- **檢查白隊的 proactive_improvements** — 主動改善也可能引入新問題，寫測試驗證
 - **思維模式**：不斷問自己「這真的是最好的嗎？已經沒有問題了嗎？還能更好嗎？」
 
 ### 紅隊紀律
@@ -395,7 +600,9 @@ for_next_battle:                   # 更新到 Battle Memory 的內容
 ### Quality Gate（紅隊產出最低標準）
 
 - [ ] 本回合至少 3 個 finding（其中至少 1 個 major+）
-- [ ] 每個 finding 都有具體的 `evidence`（程式碼片段、行號、反例），不是抽象描述
+- [ ] 至少 1 個 finding 使用 `evidence_type: test`（附 failing test + 實際執行的失敗輸出）
+- [ ] 每個 finding 都有具體的 `evidence`（測試程式碼或程式碼片段 + 分析），不是抽象描述
+- [ ] 測試檔案已寫入專案（如 `tests/test_battle_r{N}.py`）
 - [ ] 本回合的深度符合 Round Depth Escalation 要求（Round 2+ 不能全是 surface 問題）
 - [ ] 已讀過白隊前回合的 Fix Report 並針對性追擊（Round 2+ 適用）
 - [ ] Challenger Checkpoint 已填寫
@@ -462,7 +669,10 @@ else:
 | 紅隊：finding severity 判斷準確 | 紅隊：灌水（大量無實質的 minor） |
 | 紅隊：evidence 具體有力 | 紅隊：出界（超出 scope/dimensions） |
 | 紅隊：逐回合加深（surface → structural → excellence） | 紅隊：三回合都停在同一深度層級 |
+| 紅隊：測試探測精準（直刺要害，繞過 try-catch） | 紅隊：可測試的問題卻只用 review，逃避驗證 |
+| 紅隊：測試留在 codebase 有長期回歸價值 | 紅隊：測試太淺或測試本身有 bug |
 | 白隊：修復徹底、驗證完整 | 白隊：表面修復（沒解決根因） |
+| 白隊：所有 test finding 都附了 pass 輸出 | 白隊：宣稱 fixed 但沒跑測試 |
 | 白隊：proactive_improvements 有實質價值 | 白隊：修復引入新問題 |
 | 白隊：disputed 理由充分且裁判認可 | 白隊：dispute 率超過 50% |
 | 任何角色：Challenger Checkpoint 誠實且有洞察 | 任何角色：Checkpoint 敷衍（全部「沒有」「很好」） |
@@ -480,13 +690,20 @@ else:
 
 ```yaml
 # JUDGE AUDIT TRAIL
-files_inspected:                # 裁判親自讀過的檔案列表
+test_execution:                 # 裁判執行紅隊測試套件的結果
+  command: "pytest tests/test_battle_r*.py -v"
+  total_tests: 0
+  passed: 0
+  failed: 0
+  output_summary: "簡述測試執行結果"
+files_inspected:                # 裁判親自讀過的檔案列表（review finding 用）
   - path: "src/auth.ts"
     lines_read: "42-78"
     purpose: "驗證 R1-03 的修復"
 verification_actions:           # 裁判執行的驗證動作
+  - action: "執行紅隊測試套件確認白隊修復"
   - action: "讀取 git diff 確認白隊實際改了什麼"
-  - action: "追蹤函式呼叫鏈確認修復沒有副作用"
+  - action: "確認白隊沒有修改或刪除紅隊的測試"
 contrarian_check:               # 反直覺檢查 — 裁判必須至少找到一個
   found: true | false           # 是否有「紅隊說對但白隊其實修好了」或「白隊說修好但其實沒有」的案例
   description: "描述反直覺發現"
@@ -768,10 +985,13 @@ Orchestrator 執行寫入：
 ## 選題指引
 
 1. 分析專案：目錄結構、git log（最近 20 條 commit）、CLAUDE.md、已知問題、技術債
-2. 參照 past_topics 避免重複選題（除非上次該主題暴露了未解決的深層問題）
-3. 選擇專案**當前最能受益**的方向 — 不選已經做得很好的方向
-4. 定義 3-5 個評分維度，每個維度必須可觀察、可驗證
-5. 範圍要具體 — 指定目錄/檔案/層級，「讓整個專案更好」是無效主題
+2. 參照 Topic Bank 選擇方向（建議而非限制）：
+   功能正確性 | 錯誤處理 | 架構/設計 | 安全性 | 效能 | 測試品質 |
+   UI/UX | 文件品質 | DevOps/CI | 設定一致性 | 型別安全 | 狀態管理
+3. 參照 past_topics 避免重複選題（除非上次該主題暴露了未解決的深層問題）
+4. 選擇專案**當前最能受益**的方向 — 不選已經做得很好的方向
+5. 定義 3-5 個評分維度，每個維度必須可觀察、可驗證
+6. 範圍要具體 — 指定目錄/檔案/層級，「讓整個專案更好」是無效主題
 
 ## 輸出格式
 
@@ -839,12 +1059,15 @@ battle_history:
 ### 白隊上回合修復摘要
 {前回合 white_fixes 的精簡版 — 只含 finding_id, status, action，不含 WHITE 的策略}
 
-## 攻擊策略
+## 攻擊策略：測試驅動探測
 
+**第一步永遠是：寫測試探測，不是讀程式碼。**
+
+- 針對性測試優先 — 不跑主流程，直接 import 目標函式寫秒級測試
 - 從高 severity 開始 — critical/major 比一堆 minor 更有價值
-- 每個 finding 必須有 evidence — 不接受「感覺不太好」的主觀判斷
-- 後續回合針對修復不完整、修復引入新問題、或 disputed 理由不充分的地方追擊
-- 檢查白隊的 proactive_improvements — 主動改善也可能引入新問題
+- 測試能驗證的問題用 `evidence_type: test` — failing test = 鐵證
+- 測試無法驗證的問題用 `evidence_type: review` — 架構、設計、命名
+- 後續回合針對白隊修復不完整或引入新問題的地方追擊
 - 不斷問自己：這真的是最好的嗎？已經沒有問題了嗎？還能更好嗎？
 
 ## 紅隊紀律
@@ -853,6 +1076,7 @@ battle_history:
 - 不出界：只攻擊 scope 和 dimensions 內的問題
 - suggested_direction 要誠實有用：這不是陷阱
 - 不重複提交：白隊已正確修復的 finding 不要換說法重提
+- 可測試的問題必須寫測試：不能所有 finding 都用 review 逃避驗證
 
 ## Anti-Shortcut Rules（適用於你）
 
@@ -861,10 +1085,15 @@ battle_history:
 | 「只找到幾個 minor，整體看起來不錯」 | 裁判扣分 — 逃避深度分析 |
 | 三回合都只找同一層級問題 | 裁判扣分 — 沒有逐回合加深 |
 | 複製貼上前回合 finding 換說法重提 | 裁判扣分 — 灌水行為 |
+| 所有 finding 都用 review，沒寫任何測試 | 裁判扣分 — 逃避驗證 |
+| 測試太淺（`assert True`） | 裁判扣分 — 測試灌水 |
 
 ## 輸出格式
 
-**先分析專案（讀取 scope 內的檔案），再輸出以下格式：**
+**第一步：讀取 scope 內的檔案，識別可疑函式。**
+**第二步：對可測試的問題，寫測試探測並執行，確認失敗。**
+**第三步：對不可測試的問題，做程式碼審查並附 evidence。**
+**第四步：將測試檔案寫入專案（如 `tests/test_battle_r{N}.py`），再輸出以下格式：**
 
 ```yaml
 # RED TEAM — ROUND {N} FINDINGS
@@ -874,7 +1103,9 @@ findings:
     dimension: "對應維度名"
     location: "檔案路徑:行號"
     issue: "問題描述"
-    evidence: "具體證據（程式碼片段、邏輯推理、反例）"
+    evidence_type: test | review
+    evidence: "test: 測試程式碼 + 失敗輸出 | review: 程式碼片段 + 分析"
+    test_file: "tests/test_battle_r{N}.py"  # evidence_type: test 時必填
     suggested_direction: "建議改善方向"
 ```
 
@@ -892,7 +1123,9 @@ historical_awareness: "..."
 ## Quality Gate（自我檢查）
 
 - [ ] 本回合至少 3 個 finding（其中至少 1 個 major+）
-- [ ] 每個 finding 都有具體 evidence（程式碼片段、行號、反例）
+- [ ] 至少 1 個 finding 使用 `evidence_type: test`（附 failing test + 執行輸出）
+- [ ] 每個 finding 都有具體 evidence（測試程式碼或程式碼片段 + 分析）
+- [ ] 測試檔案已寫入專案（如 `tests/test_battle_r{N}.py`）
 - [ ] 深度符合本回合要求（{Surface | Structural | Excellence}）
 - [ ] Round 2+：已針對白隊修復進行追擊
 - [ ] Challenger Checkpoint 誠實填寫（不是全部「沒有」「很好」）
@@ -934,7 +1167,9 @@ historical_awareness: "..."
 ## 防守策略
 
 - 優先處理 critical > major > minor
-- 每個修復必須附 verification — 測試結果、前後對比、或嚴謹的邏輯推理
+- **test finding 的修復標準：讓紅隊的測試 pass** — 這是客觀的、無可爭議的驗證
+- **review finding 的修復標準：附前後對比或邏輯推理**
+- 修完後**必須實際跑紅隊的測試**，附上 pass 的輸出作為 verification
 - disputed 要有充分理由 — 解釋為什麼現狀是合理的設計決策
 - proactive_improvements 是加分項 — 但只做有實質價值的改善
 - 不斷問自己：這個修復夠徹底嗎？有沒有遺漏的邊界情況？能不能做得更好？
@@ -944,7 +1179,8 @@ historical_awareness: "..."
 - 不能只改表面：rename 變數不算修復架構問題
 - 修復不能引入新問題：裁判和下一回合的紅隊都會檢查
 - deferred 要說明理由：為什麼現在不修
-- 不能刪除測試來讓測試通過
+- **不能刪除或修改紅隊的測試來讓它 pass** — 紅隊的測試是不可修改的驗證標準
+- 修復必須是正向的改善
 
 ## Scope 邊界
 
@@ -966,10 +1202,14 @@ historical_awareness: "..."
 | 「已修復」但沒有附 diff 或修改內容 | 裁判扣分 — 無法驗證 |
 | 全部標記 disputed 而不實際修復 | 裁判扣分 — 迴避工作 |
 | 大量 cosmetic 改動充當 proactive_improvements | 裁判扣分 — 搶分行為 |
+| 宣稱 fixed 但沒跑紅隊測試確認 pass | 裁判扣分 — 空口無憑 |
+| 刪除或修改紅隊的測試來讓它 pass | 裁判扣分 — 作弊行為 |
 
 ## 輸出格式
 
-**先修改 scope 內的檔案（實際動手修），再輸出以下格式：**
+**第一步：修改 scope 內的檔案（實際動手修）。**
+**第二步：對 `evidence_type: test` 的 finding，跑紅隊的測試確認 pass。**
+**第三步：輸出以下格式：**
 
 ```yaml
 # WHITE TEAM — ROUND {N} FIXES
@@ -1003,6 +1243,8 @@ historical_awareness: "..."
 
 - [ ] 每個 finding 都有回應（fixed / disputed / deferred），沒有遺漏
 - [ ] 每個 fixed 都附了具體修改內容和 verification
+- [ ] 所有 `evidence_type: test` 的 fixed finding 都附了 test pass 輸出
+- [ ] 沒有修改或刪除紅隊的測試檔案
 - [ ] disputed 數量不超過總 finding 數的 50%
 - [ ] 修復深度匹配問題嚴重度（critical 不能用 one-liner 打發）
 - [ ] Challenger Checkpoint 誠實填寫
@@ -1030,31 +1272,39 @@ historical_awareness: "..."
 
 ## 終審流程
 
-### 1. 逐一覆核每個 finding
+### 1. 跑紅隊的測試套件
 
-對所有回合的每一個 finding：
+對所有 `evidence_type: test` 的 finding：
+- **實際執行**紅隊寫的測試（如 `pytest tests/test_battle_r*.py -v`）
+- 記錄哪些 pass、哪些 fail
+- test pass = 白隊修復有效（客觀驗證，不需人工判斷）
+- test fail = 白隊修復無效 → unresolved
+
+### 2. 覆核 review finding
+
+對所有 `evidence_type: review` 的 finding：
 - **實際讀取**程式碼/文件，驗證白隊宣稱的修復是否真的有效
 - 對 disputed 的 finding 做**獨立判斷** — 不偏信任何一方
 - 檢查白隊的修復是否**引入新問題**
 - 記錄你讀了哪個檔案的哪些行（Audit Trail）
 
-### 2. 獨立掃描
+### 3. 獨立掃描
 
 自己再掃一遍 scope 內的檔案，找紅白雙方都漏掉的問題。
 即使找不到，也要說明你嘗試了什麼角度。
 
-### 3. 勝負判定
+### 4. 勝負判定
 
 ```python
 if unresolved_count > 0:
-    winner = RED    # 白隊未正確修復
+    winner = RED    # 白隊未正確修復（含 test still failing）
 elif len(new_issues_found) > 0:
     winner = WHITE  # 紅隊未找出裁判發現的新問題
 else:
-    winner = WHITE  # 所有問題已修復
+    winner = WHITE  # 所有問題已修復（所有測試 pass）
 ```
 
-### 4. 輸出（必須依序輸出以下所有區塊）
+### 5. 輸出（必須依序輸出以下所有區塊）
 
 **區塊 A：Judge Audit Trail**
 

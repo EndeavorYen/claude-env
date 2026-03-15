@@ -1,3 +1,15 @@
+# Topic Bank Expansion Implementation Plan
+
+> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+
+**Goal:** Expand the Topic Bank from 12 one-line categories to 12 categories with ~80 sub-topics, giving JUDGE concrete guidance while preserving RED team creative freedom.
+
+**Architecture:** Single file edit — replace the Topic Bank section in `docs/against_rule.md` (lines 383-402) with expanded version including introduction, summary table, and sub-topic lists.
+
+**Tech Stack:** Markdown only.
+
+---
+
 # Topic Bank Expansion Design
 
 ## Summary
@@ -130,9 +142,30 @@ This is stated as a general principle, not repeated per sub-topic.
 
 ## Implementation
 
-Replace the current Topic Bank section in `docs/against_rule.md` with:
-1. Updated introduction (inspiration principle + two-layer depth framework)
-2. Summary table (12 categories, one-line each)
-3. Sub-topic lists (5-8 per category)
+### Task 1: Replace Topic Bank in against_rule.md
 
-Total addition: ~120 lines replacing current ~15 lines.
+**Files:**
+- Modify: `docs/against_rule.md:383-402` (replace current Topic Bank section)
+
+**Step 1: Replace the Topic Bank section**
+
+Replace lines 383-402 (from `### Topic Bank（建議題庫）` to the last table row before `### Phase 1~N`) with the expanded version containing:
+1. Updated introduction with flexibility principles and two-layer depth framework
+2. Summary table (12 categories, one-line each — same as current but with refined descriptions)
+3. Sub-topic lists below each category (content from "Topic Bank Content" section above)
+
+All content should be in Chinese (matching the rest of the document), translated from the English design above.
+
+**Step 2: Verify no broken references**
+
+Check that:
+- The JUDGE Phase 0 Prompt Template still references "Topic Bank" correctly
+- The `### Phase 1~N：沉默觀察` section immediately follows the Topic Bank
+- No markdown formatting is broken
+
+**Step 3: Commit**
+
+```bash
+git add docs/against_rule.md
+git commit -m "docs: expand Topic Bank with ~80 sub-topics across 12 categories"
+```
