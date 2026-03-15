@@ -544,14 +544,19 @@ async function clickStr(cdp, sid, selector) {
     (function() {
       const el = document.querySelector(${JSON.stringify(selector)});
       if (!el) return { ok: false, error: 'Element not found: ' + ${JSON.stringify(selector)} };
-      el.scrollIntoView({ block: 'center' });
-      el.click();
-      return { ok: true, tag: el.tagName, text: el.textContent.trim().substring(0, 80) };
+      el.scrollIntoView({ block: 'center', inline: 'center' });
+      const rect = el.getBoundingClientRect();
+      return { ok: true, x: rect.x + rect.width / 2, y: rect.y + rect.height / 2, tag: el.tagName, text: el.textContent.trim().substring(0, 80) };
     })()
   `;
   const result = await evalStr(cdp, sid, expr);
   const r = JSON.parse(result);
   if (!r.ok) throw new Error(r.error);
+  const base = { x: r.x, y: r.y, button: 'left', clickCount: 1, modifiers: 0 };
+  await cdp.send('Input.dispatchMouseEvent', { ...base, type: 'mouseMoved' }, sid);
+  await cdp.send('Input.dispatchMouseEvent', { ...base, type: 'mousePressed' }, sid);
+  await sleep(50);
+  await cdp.send('Input.dispatchMouseEvent', { ...base, type: 'mouseReleased' }, sid);
   return `Clicked <${r.tag}> "${r.text}"`;
 }
 
@@ -573,6 +578,46 @@ async function typeStr(cdp, sid, text) {
   if (text == null || text === '') throw new Error('text required');
   await cdp.send('Input.insertText', { text }, sid);
   return `Typed ${text.length} characters`;
+}
+
+const KEY_MAP = {
+  enter:      { key: 'Enter',      code: 'Enter',      keyCode: 13 },
+  tab:        { key: 'Tab',        code: 'Tab',        keyCode: 9 },
+  escape:     { key: 'Escape',     code: 'Escape',     keyCode: 27 },
+  backspace:  { key: 'Backspace',  code: 'Backspace',  keyCode: 8 },
+  delete:     { key: 'Delete',     code: 'Delete',     keyCode: 46 },
+  space:      { key: ' ',          code: 'Space',      keyCode: 32 },
+  arrowup:    { key: 'ArrowUp',    code: 'ArrowUp',    keyCode: 38 },
+  arrowdown:  { key: 'ArrowDown',  code: 'ArrowDown',  keyCode: 40 },
+  arrowleft:  { key: 'ArrowLeft',  code: 'ArrowLeft',  keyCode: 37 },
+  arrowright: { key: 'ArrowRight', code: 'ArrowRight', keyCode: 39 },
+};
+
+async function pressStr(cdp, sid, keyName) {
+  if (!keyName) throw new Error('Key name required (Enter, Tab, Escape, Backspace, Space, Arrow*)');
+  const mapped = KEY_MAP[keyName.toLowerCase()];
+  if (!mapped) throw new Error(`Unknown key: ${keyName}. Supported: ${Object.keys(KEY_MAP).join(', ')}`);
+  const base = { key: mapped.key, code: mapped.code, windowsVirtualKeyCode: mapped.keyCode, nativeVirtualKeyCode: mapped.keyCode };
+  await cdp.send('Input.dispatchKeyEvent', { ...base, type: 'keyDown' }, sid);
+  await cdp.send('Input.dispatchKeyEvent', { ...base, type: 'keyUp' }, sid);
+  return `Pressed ${mapped.key}`;
+}
+
+async function scrollStr(cdp, sid, direction, amount) {
+  const px = parseInt(amount) || 500;
+  const dirMap = { down: [0, px], up: [0, -px], left: [-px, 0], right: [px, 0] };
+  let dx, dy;
+  if (dirMap[direction?.toLowerCase()]) {
+    [dx, dy] = dirMap[direction.toLowerCase()];
+  } else if (direction?.includes(',')) {
+    [dx, dy] = direction.split(',').map(Number);
+    if (isNaN(dx) || isNaN(dy)) throw new Error('Invalid coordinates. Use "down", "up", or "x,y"');
+  } else {
+    throw new Error('Direction required: down, up, left, right, or x,y');
+  }
+  const result = await evalStr(cdp, sid, `(window.scrollBy(${dx}, ${dy}), JSON.stringify({ x: Math.round(window.scrollX), y: Math.round(window.scrollY) }))`);
+  const pos = JSON.parse(result);
+  return `Scrolled by (${dx}, ${dy}). Position: (${pos.x}, ${pos.y})`;
 }
 
 // Load-more: repeatedly click a button/selector until it disappears
@@ -728,6 +773,8 @@ async function runDaemon(targetId) {
         case 'click': result = await clickStr(cdp, sessionId, args[0]); break;
         case 'clickxy': result = await clickXyStr(cdp, sessionId, args[0], args[1]); break;
         case 'type': result = await typeStr(cdp, sessionId, args[0]); break;
+        case 'press': result = await pressStr(cdp, sessionId, args[0]); break;
+        case 'scroll': result = await scrollStr(cdp, sessionId, args[0], args[1]); break;
         case 'loadall': result = await loadAllStr(cdp, sessionId, args[0], args[1] ? parseInt(args[1]) : 1500); break;
         case 'evalraw': result = await evalRawStr(cdp, sessionId, args[0], args[1]); break;
         case 'stop': return { ok: true, result: '', stopAfter: true };
@@ -915,6 +962,8 @@ Usage: cdp <command> [args]
   clickxy <target> <x> <y>          Click at CSS pixel coordinates (see coordinate note below)
   type    <target> <text>           Type text at current focus via Input.insertText
                                     Works in cross-origin iframes unlike eval-based approaches
+  press   <target> <key>           Press key (Enter, Tab, Escape, Backspace, Space, Arrow*)
+  scroll  <target> <dir|x,y> [px]  Scroll page (down/up/left/right or x,y offset; default 500px)
   loadall <target> <selector> [ms]  Repeatedly click a "load more" button until it disappears
                                     Optional interval in ms between clicks (default 1500)
   evalraw <target> <method> [json]  Send a raw CDP command; returns JSON result
@@ -956,7 +1005,7 @@ DAEMON IPC (for advanced use / scripting)
 
 const NEEDS_TARGET = new Set([
   'snap','snapshot','eval','shot','screenshot','html','nav','navigate',
-  'net','network','click','clickxy','type','loadall','evalraw','status','console','summary',
+  'net','network','click','clickxy','type','press','scroll','loadall','evalraw','status','console','summary',
 ]);
 
 async function main() {
