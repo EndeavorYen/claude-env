@@ -2,21 +2,23 @@
 
 ## 這是什麼
 
-這是一個 **umbrella marketplace repo** — 本身不含任何 plugin 原始碼，只做兩件事：
+這是一個 **monorepo** — plugin 原始碼和環境設定都在這裡：
 
-1. `marketplace.json` 指向所有自己開發的 plugin repos（統一入口）
-2. `settings.json` 備份完整的 Claude Code 環境設定（一鍵還原）
-
-就像 Linux 的 meta-package — `apt install build-essential` 本身沒有 gcc，只是一份依賴清單。
+1. `plugins/` 包含所有自己開發的 plugin 原始碼
+2. `marketplace.json` 指向 `plugins/` 子目錄（本地相對路徑）
+3. `settings.json` 備份完整的 Claude Code 環境設定（一鍵還原）
 
 ## 架構
 
 ```
-claude-env (this repo)          ← 不含原始碼，只有指向
+claude-env (this repo)          ← monorepo：plugin 原始碼 + 環境設定
     │
-    ├── marketplace.json        ← 指向各 plugin repos
-    │   ├── → EndeavorYen/claude-squad    (agent team orchestrator)
-    │   └── → EndeavorYen/claude-misc     (miscellaneous skills/commands)
+    ├── plugins/                ← 所有自己開發的 plugin
+    │   ├── squad/              (agent team orchestrator)
+    │   └── misc/               (miscellaneous skills/commands)
+    │
+    ├── .claude-plugin/
+    │   └── marketplace.json    ← 指向 plugins/ 子目錄（相對路徑）
     │
     ├── settings.json           ← 完整環境快照
     │   ├── enabledPlugins      (26 official enabled + 1 disabled + 2 custom)
@@ -48,7 +50,8 @@ Claude Code 的設定分兩層，這個 repo 只管全域層：
 
 | 檔案 | 用途 | 何時更新 |
 |------|------|---------|
-| `.claude-plugin/marketplace.json` | Plugin 目錄，指向各 GitHub repo | 新增/移除自己的 plugin repo 時 |
+| `plugins/` | 所有自己開發的 plugin 原始碼 | 新增/修改 plugin 時 |
+| `.claude-plugin/marketplace.json` | Plugin 目錄，指向 `plugins/` 子目錄 | 新增/移除 plugin 時 |
 | `settings.json` | `~/.claude/settings.json` 的備份（含完整 permissions） | 環境變動時（裝新 plugin、改權限、改設定） |
 | `mcp.template.json` | `.mcp.json` 範本（install.sh 自動部署到 `~/.claude/`） | MCP server 設定變動時 |
 | `install.sh` | 安裝/同步工具 | marketplace.json 新增 plugin 時同步加 install 行 |
@@ -74,23 +77,27 @@ bash install.sh sync
 
 ## 開發慣例
 
-### 新增一個自己開發的 plugin repo
+### 新增一個 plugin
 
-1. 在 `.claude-plugin/marketplace.json` 的 `plugins` 陣列加一筆：
+1. 建立 plugin 目錄結構：
+
+```bash
+mkdir -p plugins/<name>/.claude-plugin
+```
+
+2. 在 `plugins/<name>/.claude-plugin/` 建立 `plugin.json` 以及對應的 skills/commands 檔案。
+
+3. 在 `.claude-plugin/marketplace.json` 的 `plugins` 陣列加一筆：
 
 ```json
 {
   "name": "new-plugin-name",
-  "source": {
-    "source": "github",
-    "repo": "EndeavorYen/claude-new-plugin",
-    "ref": "main"
-  },
+  "source": "./plugins/<name>",
   "description": "What it does"
 }
 ```
 
-2. 在 `settings.json` 的 `enabledPlugins` 加一行：
+4. 在 `settings.json` 的 `enabledPlugins` 加一行：
 
 ```json
 "new-plugin-name@my-env": true
@@ -98,13 +105,13 @@ bash install.sh sync
 
 如果 plugin 提供 MCP tools，也要在 `permissions.allow` 加對應的 `mcp__` 規則。
 
-3. 在 `install.sh` 的 setup 和 sync 兩個區塊都加一行：
+5. 在 `install.sh` 的 setup 和 sync 兩個區塊都加一行：
 
 ```bash
 claude plugin install new-plugin-name@my-env --scope user
 ```
 
-4. Commit + push。
+6. Commit + push。
 
 ### 環境快照更新
 
@@ -115,7 +122,7 @@ git add settings.json && git commit -m "update: env snapshot" && git push
 
 ### 注意事項
 
-- **不要把 plugin 原始碼放在這個 repo** — 每個 plugin 有自己的 repo
+- **每個 plugin 各自獨立版本管理** — 各自的 `plugin.json` version
 - **settings.json 不含 MCP tokens** — MCP 設定在各專案的 `.mcp.json` 裡（已 gitignore）
 - **permissions 的唯一 source of truth 是 settings.json** — 不要另外維護 settings.local.json
 - **marketplace name 是 `my-env`** — 所有 plugin 安裝時用 `@my-env` 後綴

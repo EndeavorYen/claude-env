@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+
+# post-commit hook — Auto-bump version after feat:/fix: commits
+#
+# How it works:
+#   1. Checks if the latest commit is version-relevant (feat: or fix:)
+#   2. If so, runs bump-version.sh auto --release
+#   3. A new "chore: release vX.Y.Z" commit + tag is created automatically
+#
+# The SQUAD_BUMPING env var prevents infinite recursion (the bump commit
+# itself is a chore: commit, so it wouldn't trigger anyway, but this is
+# a safety net).
+
+# ── Reentrancy guard ─────────────────────────────────────────────────
+[[ -n "${SQUAD_BUMPING:-}" ]] && exit 0
+
+# ── Check if latest commit is version-relevant ───────────────────────
+msg=$(git log -1 --pretty=format:"%s")
+
+if echo "$msg" | grep -qE '^(feat|fix)(\(.+\))?!?:'; then
+  echo ""
+  echo "[squad] Version-relevant commit detected: $msg"
+  echo "[squad] Running auto-bump..."
+
+  export SQUAD_BUMPING=1
+
+  # Find the bump script relative to repo root
+  root=$(git rev-parse --show-toplevel)
+  bump_script="$root/scripts/bump-version.sh"
+
+  if [[ -f "$bump_script" ]]; then
+    bash "$bump_script" auto --release
+  else
+    echo "[squad] WARNING: bump-version.sh not found at $bump_script"
+    exit 0
+  fi
+fi

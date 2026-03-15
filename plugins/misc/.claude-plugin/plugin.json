@@ -1,0 +1,10 @@
+{
+  "name": "misc",
+  "version": "0.1.0",
+  "description": "Personal miscellaneous skills and commands",
+  "author": {
+    "name": "EndeavorYen"
+  },
+  "skills": "./skills/",
+  "commands": ["./commands/"]
+}

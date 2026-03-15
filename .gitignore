@@ -13,3 +13,6 @@ Desktop.ini
 
 # Battle state file (temporary — deleted after each session)
 .battle_state.yaml
+
+# Squad runtime state (generated per-project, not tracked)
+plugins/squad/.claude/

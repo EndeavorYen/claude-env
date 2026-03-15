@@ -6,20 +6,12 @@
   "plugins": [
     {
       "name": "squad",
-      "source": {
-        "source": "github",
-        "repo": "EndeavorYen/claude-squad",
-        "ref": "main"
-      },
+      "source": "./plugins/squad",
       "description": "Self-evolving agent team orchestrator"
     },
     {
       "name": "misc",
-      "source": {
-        "source": "github",
-        "repo": "EndeavorYen/claude-misc",
-        "ref": "main"
-      },
+      "source": "./plugins/misc",
       "description": "Personal miscellaneous skills and commands"
     }
   ]

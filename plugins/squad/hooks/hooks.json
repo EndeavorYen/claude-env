@@ -1,0 +1,16 @@
+{
+  "description": "Squad mission lifecycle hooks — prevent premature termination during active missions",
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Use the Bash tool to run: `cat .claude/squad/state/active-mission.md 2>/dev/null || echo NOT_ACTIVE`. If the output is NOT_ACTIVE (file does not exist), approve stopping immediately. If the output shows mission content, block stopping with: 'Squad mission still in progress at stage [X from file content]. Use /squad:squad --abort to safely abort before stopping.'"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "squad",
+  "version": "0.3.0",
+  "description": "Self-evolving agent team orchestrator with 7-stage pipeline (RECON → PLAN → EXECUTE → INTEGRATE → VERIFY → DEBRIEF → RETRO). Features convoy deployment, interface contracts, and fault-tolerant execution.",
+  "author": {
+    "name": "Rexiano",
+    "email": "noreply@rexiano.dev"
+  }
+}

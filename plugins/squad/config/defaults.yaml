@@ -1,0 +1,51 @@
+# Squad plugin configuration v0.2
+# Copied to .claude/squad/config.yaml on first run. Customize there.
+
+# Gate level: supervised | standard | autonomous
+default_gate: standard
+
+# Report and knowledge paths (advisory — used by the squad command to locate files)
+reports_dir: .claude/squad/reports
+knowledge_dir: .claude/squad/knowledge
+
+# Evolution settings
+evolution:
+  retro_enabled: true          # Run RETRO stage after each mission
+  auto_create_tools: true      # Allow squad to create bash scripts in tools/
+  auto_create_skills: true     # Allow squad to create new SKILL.md files
+
+# Team constraints
+team:
+  max_members: 5               # Maximum concurrent squad members
+  default_model: inherit       # Model for squad members (inherit | sonnet | haiku | opus)
+  use_worktrees: true          # Isolate squad members in git worktrees
+
+# Deployment strategy
+deployment:
+  convoy_threshold: 5        # Squad size at which convoy mode becomes mandatory
+  wave_threshold: 3          # Number of dependency waves that triggers convoy mode
+
+# Integration settings
+integration:
+  conflict_pause_threshold: 3  # Number of conflicting files that forces gate pause
+  drift_warn_threshold: 20     # Commits behind HEAD that triggers drift warning
+  cleanup_outputs_after: debrief  # When to clean up agent outputs (debrief | retro)
+
+# Resilience settings
+resilience:
+  respawn_enabled: true        # Auto-respawn agents that disconnect
+  max_respawns_per_task: 1     # Maximum respawn attempts per task
+  agent_timeout_minutes: 30    # Minutes before considering an agent unresponsive
+  startup_timeout_minutes: 3   # Minutes to wait for contract-ack.md before declaring agent stale
+  fallback_to_direct: true     # If all respawns fail, Chief of Staff executes tasks directly
+
+# Lint exclusion patterns (applied automatically during VERIFY)
+lint_exclusions:
+  - ".claude/"
+
+# Verification commands (auto-detected from project if empty)
+# Uncomment and customize for your project:
+# verify_commands:
+#   - "pnpm lint"
+#   - "pnpm typecheck"
+#   - "pnpm test"
