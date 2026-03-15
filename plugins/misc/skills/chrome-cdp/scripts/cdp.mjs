@@ -27,6 +27,14 @@ try { mkdirSync(RUNTIME_DIR, { recursive: true, mode: 0o700 }); } catch {}
 const SOCK_PREFIX = resolve(RUNTIME_DIR, 'cdp-');
 const PAGES_CACHE = resolve(RUNTIME_DIR, 'pages.json');
 
+class RingBuffer {
+  constructor(capacity) { this.buf = []; this.capacity = capacity; this.seq = 0; }
+  push(entry) { entry._seq = ++this.seq; this.buf.push(entry); if (this.buf.length > this.capacity) this.buf.shift(); }
+  since(seq) { return this.buf.filter(e => e._seq > seq); }
+  all() { return [...this.buf]; }
+  latest() { return this.seq; }
+}
+
 function sockPath(targetId) {
   if (process.platform === 'win32') return `\\\\.\\pipe\\cdp-${targetId}`;
   return `${SOCK_PREFIX}${targetId}.sock`;
@@ -509,6 +517,38 @@ async function runDaemon(targetId) {
     cdp.close();
     process.exit(1);
   }
+
+  // --- Background observation ---
+  const consoleBuf = new RingBuffer(200);
+  const exceptionBuf = new RingBuffer(50);
+  const navBuf = new RingBuffer(10);
+  let lastReadSeq = { console: 0, exception: 0 };
+
+  // Enable domains for background collection
+  try { await cdp.send('Runtime.enable', {}, sessionId); } catch {}
+  try { await cdp.send('Page.enable', {}, sessionId); } catch {}
+
+  cdp.onEvent('Runtime.consoleAPICalled', (params) => {
+    const level = params.type || 'log';
+    const text = (params.args || []).map(a => a.value ?? a.description ?? JSON.stringify(a)).join(' ');
+    const stack = params.stackTrace?.callFrames?.[0];
+    const loc = stack ? `${stack.url.split('/').pop()}:${stack.lineNumber}` : '';
+    consoleBuf.push({ level, text, loc, ts: Date.now() });
+  });
+
+  cdp.onEvent('Runtime.exceptionThrown', (params) => {
+    const detail = params.exceptionDetails;
+    const msg = detail?.text || detail?.exception?.description || 'Unknown error';
+    const stack = detail?.stackTrace?.callFrames?.[0];
+    const loc = stack ? `${stack.url.split('/').pop()}:${stack.lineNumber}` : '';
+    exceptionBuf.push({ msg, loc, ts: Date.now() });
+  });
+
+  cdp.onEvent('Page.frameNavigated', (params) => {
+    if (!params.frame.parentId) { // main frame only
+      navBuf.push({ url: params.frame.url, ts: Date.now() });
+    }
+  });
 
   // Shutdown helpers
   let alive = true;
