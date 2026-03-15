@@ -659,6 +659,56 @@ async function waitForStr(cdp, sid, selector, timeoutMs = 10000) {
   throw new Error(`Timeout: "${selector}" not found within ${timeout}ms`);
 }
 
+async function fillStr(cdp, sid, selector, text) {
+  if (!selector) throw new Error('CSS selector required');
+  if (text == null) throw new Error('Text required');
+  const expr = `
+    (function() {
+      const el = document.querySelector(${JSON.stringify(selector)});
+      if (!el) return { ok: false, error: 'Element not found: ' + ${JSON.stringify(selector)} };
+      el.scrollIntoView({ block: 'center', inline: 'center' });
+      const rect = el.getBoundingClientRect();
+      return { ok: true, x: rect.x + rect.width / 2, y: rect.y + rect.height / 2, tag: el.tagName };
+    })()
+  `;
+  const result = await evalStr(cdp, sid, expr);
+  const r = JSON.parse(result);
+  if (!r.ok) throw new Error(r.error);
+  // Click to focus
+  const base = { x: r.x, y: r.y, button: 'left', clickCount: 1, modifiers: 0 };
+  await cdp.send('Input.dispatchMouseEvent', { ...base, type: 'mousePressed' }, sid);
+  await cdp.send('Input.dispatchMouseEvent', { ...base, type: 'mouseReleased' }, sid);
+  await sleep(50);
+  // Select all (Ctrl+A on Windows/Linux, Cmd+A on macOS)
+  const mod = process.platform === 'darwin' ? 4 : 2;
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'a', code: 'KeyA', modifiers: mod, windowsVirtualKeyCode: 65 }, sid);
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'a', code: 'KeyA', modifiers: 0, windowsVirtualKeyCode: 65 }, sid);
+  // Insert text (replaces selection)
+  await cdp.send('Input.insertText', { text }, sid);
+  return `Filled <${r.tag}> with "${text.substring(0, 40)}${text.length > 40 ? '...' : ''}"`;
+}
+
+async function selectStr(cdp, sid, selector, value) {
+  if (!selector) throw new Error('CSS selector required');
+  if (value == null) throw new Error('Value required');
+  const expr = `
+    (function() {
+      const el = document.querySelector(${JSON.stringify(selector)});
+      if (!el) return { ok: false, error: 'Element not found: ' + ${JSON.stringify(selector)} };
+      if (el.tagName !== 'SELECT') return { ok: false, error: 'Not a <select>: ' + el.tagName };
+      el.value = ${JSON.stringify(value)};
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+      const opt = el.options[el.selectedIndex];
+      return { ok: true, text: opt ? opt.textContent.trim() : value };
+    })()
+  `;
+  const result = await evalStr(cdp, sid, expr);
+  const r = JSON.parse(result);
+  if (!r.ok) throw new Error(r.error);
+  return `Selected "${r.text}"`;
+}
+
 // Load-more: repeatedly click a button/selector until it disappears
 async function loadAllStr(cdp, sid, selector, intervalMs = 1500) {
   if (!selector) throw new Error('CSS selector required');
@@ -817,6 +867,8 @@ async function runDaemon(targetId) {
         case 'hover': result = await hoverStr(cdp, sessionId, args[0]); break;
         case 'waitfor': result = await waitForStr(cdp, sessionId, args[0], args[1]); break;
         case 'loadall': result = await loadAllStr(cdp, sessionId, args[0], args[1] ? parseInt(args[1]) : 1500); break;
+        case 'fill': result = await fillStr(cdp, sessionId, args[0], args[1]); break;
+        case 'select': result = await selectStr(cdp, sessionId, args[0], args[1]); break;
         case 'evalraw': result = await evalRawStr(cdp, sessionId, args[0], args[1]); break;
         case 'stop': return { ok: true, result: '', stopAfter: true };
         default: return { ok: false, error: `Unknown command: ${cmd}` };
@@ -1009,6 +1061,8 @@ Usage: cdp <command> [args]
   waitfor <target> <selector> [ms]  Wait for element to appear (default 10000ms, max 30s)
   loadall <target> <selector> [ms]  Repeatedly click a "load more" button until it disappears
                                     Optional interval in ms between clicks (default 1500)
+  fill    <target> <selector> <txt> Clear field and type text (for form filling)
+  select  <target> <selector> <val> Select an option in a <select> element by value
   evalraw <target> <method> [json]  Send a raw CDP command; returns JSON result
                                     e.g. evalraw <t> "DOM.getDocument" '{}'
   open  [url]                       Open a new tab (default: about:blank)
@@ -1048,7 +1102,7 @@ DAEMON IPC (for advanced use / scripting)
 
 const NEEDS_TARGET = new Set([
   'snap','snapshot','eval','shot','screenshot','html','nav','navigate',
-  'net','network','click','clickxy','type','press','scroll','hover','waitfor','loadall','evalraw','status','console','summary',
+  'net','network','click','clickxy','type','press','scroll','hover','waitfor','loadall','fill','select','evalraw','status','console','summary',
 ]);
 
 async function main() {
@@ -1145,6 +1199,9 @@ async function main() {
     const text = cmdArgs.join(' ');
     if (!text) { console.error('Error: text required'); process.exit(1); }
     cmdArgs[0] = text;
+  } else if (cmd === 'fill') {
+    if (!cmdArgs[0]) { console.error('Error: selector required'); process.exit(1); }
+    if (cmdArgs.length > 2) cmdArgs[1] = cmdArgs.slice(1).join(' ');
   } else if (cmd === 'evalraw') {
     // args: [method, ...jsonParts] — join json parts in case of spaces
     if (!cmdArgs[0]) { console.error('Error: CDP method required'); process.exit(1); }
