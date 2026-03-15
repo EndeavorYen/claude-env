@@ -523,7 +523,7 @@ async function summaryStr(cdp, sid, consoleBuf, exceptionBuf) {
   lines.push(`Focused: ${r.focused}`);
 
   const scrollPct = r.scrollMax > 0 ? Math.round(r.scrollY / r.scrollMax * 100) + '%' : 'no scroll';
-  lines.push(`Scroll: ${r.scrollY} / ${r.scrollY + r.scrollMax} (${scrollPct})`);
+  lines.push(`Scroll: ${r.scrollY} / ${r.scrollMax} max (${scrollPct})`);
 
   const errors = consoleBuf.all().filter(e => e.level === 'error').length;
   const warnings = consoleBuf.all().filter(e => e.level === 'warning' || e.level === 'warn').length;
@@ -1177,8 +1177,9 @@ DAEMON IPC (for advanced use / scripting)
     Request:  {"id":<number>, "cmd":"<command>", "args":["arg1","arg2",...]}
     Response: {"id":<number>, "ok":true,  "result":"<string>"}
            or {"id":<number>, "ok":false, "error":"<message>"}
-  Commands mirror the CLI: snap, eval, shot, html, nav, net, click, clickxy,
-  type, loadall, evalraw, stop. Use evalraw to send arbitrary CDP methods.
+  Commands mirror the CLI: status, summary, console, snap, eval, shot, fullshot,
+  html, nav, net, click, clickxy, hover, type, press, scroll, fill, select,
+  waitfor, loadall, styles, cookies, evalraw, stop. Use evalraw to send arbitrary CDP methods.
   The socket disappears after 20 min of inactivity or when the tab closes.
 `;
 
