@@ -709,6 +709,82 @@ async function selectStr(cdp, sid, selector, value) {
   return `Selected "${r.text}"`;
 }
 
+async function fullshotStr(cdp, sid, filePath, targetId) {
+  let dpr = 1;
+  try {
+    const raw = await evalStr(cdp, sid, 'window.devicePixelRatio');
+    const parsed = parseFloat(raw);
+    if (parsed > 0) dpr = parsed;
+  } catch {}
+
+  const metrics = await cdp.send('Page.getLayoutMetrics', {}, sid);
+  const width = metrics.cssContentSize?.width || metrics.contentSize?.width || 1280;
+  const height = metrics.cssContentSize?.height || metrics.contentSize?.height || 800;
+
+  const { data } = await cdp.send('Page.captureScreenshot', {
+    format: 'png',
+    captureBeyondViewport: true,
+    clip: { x: 0, y: 0, width, height, scale: 1 },
+  }, sid);
+
+  const out = filePath || resolve(RUNTIME_DIR, `fullshot-${(targetId || 'unknown').slice(0, 8)}.png`);
+  writeFileSync(out, Buffer.from(data, 'base64'));
+
+  return `${out}\nFull-page screenshot saved. Size: ${width}x${height} CSS px, DPR: ${dpr}`;
+}
+
+async function stylesStr(cdp, sid, selector) {
+  if (!selector) throw new Error('CSS selector required');
+  const expr = `
+    (function() {
+      const el = document.querySelector(${JSON.stringify(selector)});
+      if (!el) return null;
+      const cs = window.getComputedStyle(el);
+      const props = {};
+      const keep = [
+        'display','visibility','opacity','position','top','right','bottom','left',
+        'width','height','min-width','min-height','max-width','max-height',
+        'margin','padding','border','box-sizing','overflow','z-index',
+        'flex','flex-direction','flex-wrap','align-items','justify-content','gap',
+        'grid-template-columns','grid-template-rows',
+        'color','background-color','background','font-size','font-weight','font-family',
+        'line-height','text-align','text-decoration','text-overflow','white-space',
+        'transform','transition','animation','cursor','pointer-events','user-select',
+        'box-shadow','border-radius','outline',
+      ];
+      for (const p of keep) {
+        const v = cs.getPropertyValue(p);
+        if (v && v !== 'none' && v !== 'normal' && v !== 'auto' && v !== '0px' && v !== 'visible'
+            && v !== 'static' && v !== 'content-box' && v !== 'start' && v !== 'baseline'
+            && v !== 'inherit' && v !== 'default' && v !== 'rgb(0, 0, 0)') {
+          props[p] = v;
+        }
+      }
+      return { tag: el.tagName, id: el.id, cls: el.className?.toString().substring(0, 80), props };
+    })()
+  `;
+  const result = await evalStr(cdp, sid, expr);
+  if (result === 'null') throw new Error('Element not found: ' + selector);
+  const r = JSON.parse(result);
+  const header = '<' + r.tag + '>' + (r.id ? '#' + r.id : '') + (r.cls ? '.' + r.cls.split(' ').join('.') : '');
+  const lines = [header];
+  for (const [k, v] of Object.entries(r.props)) {
+    lines.push('  ' + k + ': ' + v);
+  }
+  return lines.join('\n');
+}
+
+async function cookiesStr(cdp, sid) {
+  const { cookies } = await cdp.send('Network.getCookies', {}, sid);
+  if (!cookies || cookies.length === 0) return 'No cookies';
+  return cookies.map(c => {
+    const val = c.value.length > 40 ? c.value.substring(0, 40) + '...' : c.value;
+    const flags = [c.httpOnly && 'HttpOnly', c.secure && 'Secure', c.sameSite].filter(Boolean).join(' ');
+    const exp = c.expires > 0 ? new Date(c.expires * 1000).toISOString().slice(0, 19) : 'session';
+    return `${c.name.padEnd(24)} ${val.padEnd(44)} ${c.domain.padEnd(24)} ${exp.padEnd(20)} ${flags}`;
+  }).join('\n');
+}
+
 // Load-more: repeatedly click a button/selector until it disappears
 async function loadAllStr(cdp, sid, selector, intervalMs = 1500) {
   if (!selector) throw new Error('CSS selector required');
@@ -869,6 +945,9 @@ async function runDaemon(targetId) {
         case 'loadall': result = await loadAllStr(cdp, sessionId, args[0], args[1] ? parseInt(args[1]) : 1500); break;
         case 'fill': result = await fillStr(cdp, sessionId, args[0], args[1]); break;
         case 'select': result = await selectStr(cdp, sessionId, args[0], args[1]); break;
+        case 'fullshot': result = await fullshotStr(cdp, sessionId, args[0], targetId); break;
+        case 'styles': result = await stylesStr(cdp, sessionId, args[0]); break;
+        case 'cookies': result = await cookiesStr(cdp, sessionId); break;
         case 'evalraw': result = await evalRawStr(cdp, sessionId, args[0], args[1]); break;
         case 'stop': return { ok: true, result: '', stopAfter: true };
         default: return { ok: false, error: `Unknown command: ${cmd}` };
@@ -1063,6 +1142,9 @@ Usage: cdp <command> [args]
                                     Optional interval in ms between clicks (default 1500)
   fill    <target> <selector> <txt> Clear field and type text (for form filling)
   select  <target> <selector> <val> Select an option in a <select> element by value
+  fullshot <target> [file]          Full-page screenshot (captures beyond viewport)
+  styles  <target> <selector>       Get computed styles for element (filtered to meaningful props)
+  cookies <target>                  List cookies for current page
   evalraw <target> <method> [json]  Send a raw CDP command; returns JSON result
                                     e.g. evalraw <t> "DOM.getDocument" '{}'
   open  [url]                       Open a new tab (default: about:blank)
@@ -1102,7 +1184,7 @@ DAEMON IPC (for advanced use / scripting)
 
 const NEEDS_TARGET = new Set([
   'snap','snapshot','eval','shot','screenshot','html','nav','navigate',
-  'net','network','click','clickxy','type','press','scroll','hover','waitfor','loadall','fill','select','evalraw','status','console','summary',
+  'net','network','click','clickxy','type','press','scroll','hover','waitfor','loadall','fill','select','fullshot','styles','cookies','evalraw','status','console','summary',
 ]);
 
 async function main() {
