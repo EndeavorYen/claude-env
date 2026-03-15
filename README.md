@@ -9,7 +9,7 @@ claude-env/
 ├── plugins/
 │   ├── misc/                  ← Personal miscellaneous skills & commands
 │   │   ├── .claude-plugin/plugin.json
-│   │   ├── skills/ (5 skills)
+│   │   ├── skills/ (6 skills)
 │   │   └── commands/ (1 command)
 │   └── squad/                 ← Self-evolving agent team orchestrator
 │       ├── .claude-plugin/plugin.json
