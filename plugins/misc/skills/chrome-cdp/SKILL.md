@@ -70,6 +70,13 @@ scripts/cdp.mjs type    <target> <text>         # Input.insertText at current fo
 scripts/cdp.mjs press   <target> <key>         # press key (Enter, Tab, Escape, Backspace, Space, Arrow*)
 scripts/cdp.mjs scroll  <target> <dir|x,y> [px]  # scroll page (down/up/left/right; default 500px)
 scripts/cdp.mjs loadall <target> <selector> [ms]  # click "load more" until gone (default 1500ms between clicks)
+scripts/cdp.mjs hover   <target> <selector>          # hover element (triggers :hover, tooltips)
+scripts/cdp.mjs waitfor <target> <selector> [ms]      # wait for element to appear (default 10s)
+scripts/cdp.mjs fill    <target> <selector> <text>     # clear field + type text (form filling)
+scripts/cdp.mjs select  <target> <selector> <value>    # select <select> option by value
+scripts/cdp.mjs fullshot <target> [file]               # full-page screenshot (beyond viewport)
+scripts/cdp.mjs styles  <target> <selector>            # computed styles (meaningful props only)
+scripts/cdp.mjs cookies <target>                       # list cookies for current page
 scripts/cdp.mjs evalraw <target> <method> [json]  # raw CDP command passthrough
 scripts/cdp.mjs open    [url]                  # open new tab (each triggers Allow prompt)
 scripts/cdp.mjs stop    [target]               # stop daemon(s)
@@ -93,6 +100,26 @@ CSS px = screenshot image px / DPR
 - `status` is the primary debug entry point — always start here. It shows buffered console errors without needing to "wait and capture".
 - Console entries are buffered from the moment the daemon starts. Use `console --errors` to quickly find JS errors.
 
+## Workflow Patterns
+
+### Debugging a broken page
+1. `status <target>` — check for console errors (buffered since daemon start)
+2. `console <target> --errors` — detailed error messages + stack traces
+3. `snap <target>` — inspect page structure
+4. `styles <target> ".broken-element"` — check computed styles
+
+### Form automation
+1. `fill <target> "#email" "user@example.com"` — fill input
+2. `select <target> "#country" "US"` — select dropdown
+3. `press <target> Enter` — submit
+4. `waitfor <target> ".success-message"` — wait for result
+
+### Visual bug investigation
+1. `summary <target>` — quick page overview
+2. `fullshot <target>` — capture entire page
+3. `styles <target> ".suspect"` — inspect layout properties
+4. `eval <target> "document.querySelector('.suspect').getBoundingClientRect()"` — exact position
+
 ## Source & Changelog
 
 **Upstream**: [pasky/chrome-cdp-skill](https://github.com/pasky/chrome-cdp-skill) (v1.0.1)
@@ -105,3 +132,6 @@ CSS px = screenshot image px / DPR
 - **DPR fix**: Simplified detection to JS-only
 - **Windows support**: `%LOCALAPPDATA%` browser paths, named pipes, POSIX guards
 - **Edge filter**: `edge://` internal pages excluded from `list`
+- **Automation commands**: `hover`, `waitfor`, `fill` (clear + type), `select` (dropdown)
+- **Deep debug commands**: `fullshot` (full-page screenshot), `styles` (computed styles), `cookies`
+- **Workflow patterns**: Added common debug/automation workflow documentation
