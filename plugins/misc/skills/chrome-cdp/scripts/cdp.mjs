@@ -313,27 +313,12 @@ async function evalStr(cdp, sid, expression) {
 }
 
 async function shotStr(cdp, sid, filePath, targetId) {
-  // Get device scale factor so we can report coordinate mapping
   let dpr = 1;
   try {
-    const metrics = await cdp.send('Page.getLayoutMetrics', {}, sid);
-    dpr = metrics.visualViewport?.clientWidth
-      ? metrics.cssVisualViewport?.clientWidth
-        ? Math.round((metrics.visualViewport.clientWidth / metrics.cssVisualViewport.clientWidth) * 100) / 100
-        : 1
-      : 1;
-    // Simpler: deviceScaleFactor is on the root Page metrics
-    const { deviceScaleFactor } = await cdp.send('Emulation.getDeviceMetricsOverride', {}, sid).catch(() => ({}));
-    if (deviceScaleFactor) dpr = deviceScaleFactor;
+    const raw = await evalStr(cdp, sid, 'window.devicePixelRatio');
+    const parsed = parseFloat(raw);
+    if (parsed > 0) dpr = parsed;
   } catch {}
-  // Fallback: try to get DPR from JS
-  if (dpr === 1) {
-    try {
-      const raw = await evalStr(cdp, sid, 'window.devicePixelRatio');
-      const parsed = parseFloat(raw);
-      if (parsed > 0) dpr = parsed;
-    } catch {}
-  }
 
   const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' }, sid);
   const out = filePath || resolve(RUNTIME_DIR, `screenshot-${(targetId || 'unknown').slice(0, 8)}.png`);
@@ -731,7 +716,7 @@ async function runDaemon(targetId) {
           result = JSON.stringify(pages);
           break;
         }
-        case 'snap': case 'snapshot': result = await snapshotStr(cdp, sessionId, true); break;
+        case 'snap': case 'snapshot': result = await snapshotStr(cdp, sessionId, args[0] !== '--full'); break;
         case 'eval': result = await evalStr(cdp, sessionId, args[0]); break;
         case 'shot': case 'screenshot': result = await shotStr(cdp, sessionId, args[0], targetId); break;
         case 'html': result = await htmlStr(cdp, sessionId, args[0]); break;
@@ -917,7 +902,7 @@ const USAGE = `cdp - lightweight Chrome DevTools Protocol CLI (no Puppeteer)
 Usage: cdp <command> [args]
 
   list                              List open pages (shows unique target prefixes)
-  snap  <target>                    Accessibility tree snapshot
+  snap  <target> [--full]           Accessibility tree snapshot (compact by default, --full for complete)
   eval  <target> <expr>             Evaluate JS expression
   shot  <target> [file]             Screenshot (default: screenshot-<target>.png in runtime dir); prints coordinate mapping
   html  <target> [selector]         Get HTML (full page or CSS selector)
@@ -1004,7 +989,7 @@ async function main() {
     }
     writeFileSync(PAGES_CACHE, JSON.stringify(pages), { mode: 0o600 });
     console.log(formatPageList(pages));
-    setTimeout(() => process.exit(0), 100);
+    process.stdout.write('', () => process.exit(0));
     return;
   }
 
