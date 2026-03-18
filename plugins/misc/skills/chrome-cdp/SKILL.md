@@ -9,13 +9,34 @@ Lightweight Chrome DevTools Protocol CLI. Connects directly via WebSocket — no
 
 ## Prerequisites
 
-- Chrome (or Chromium, Brave, Edge, Vivaldi) with remote debugging enabled: open `chrome://inspect/#remote-debugging` and toggle the switch
+- Chrome (or Chromium, Brave, Edge, Vivaldi) with remote debugging enabled: open `chrome://inspect/#remote-debugging` and toggle the switch. This is sufficient — do NOT suggest restarting Chrome with `--remote-debugging-port`.
 - Node.js 22+ (uses built-in WebSocket)
 - If your browser's `DevToolsActivePort` is in a non-standard location, set `CDP_PORT_FILE` to its full path
 
+## Agent Instructions
+
+**Finding Node.js**: On Windows, `node` may not be in the bash PATH even if installed. If `node` is not found, use `powershell.exe -NoProfile -Command "(Get-Command node -ErrorAction SilentlyContinue).Source"` to locate it, then prepend its directory to PATH. Do NOT spend multiple attempts guessing paths — ask the user if PowerShell also fails.
+
+**Invoking commands**: The script is at `scripts/cdp.mjs` **relative to this skill's directory**. Use the full absolute path when invoking:
+```bash
+node ~/.claude/plugins/.../skills/chrome-cdp/scripts/cdp.mjs <command> [args]
+```
+On first use, always start with `list` to verify connectivity and discover available tabs.
+
+**Interpreting `list` output**:
+```
+A7BA5C64  My Page Title    https://example.com/page
+F39B10E2  Another Tab      https://other.site/path
+```
+- Each line: `<8-char target ID>  <title>  <url>`. Use the target ID (e.g. `A7BA5C64`) for subsequent commands.
+- **Empty output (exit 0)** = no tabs available. This is normal — either Chrome has no open tabs, or Chrome has not yet approved debugging. Tell the user: "Please open a tab in Chrome and approve the 'Allow debugging' dialog, then I'll retry." Do NOT suggest `--remote-debugging-port` restarts.
+- **Error output** = connection problem. Check prerequisites.
+
+**Screenshots**: `shot` and `fullshot` print the saved file path (default: `~/.cache/cdp/screenshot-<target>.png`). After taking a screenshot, use the **Read tool** to view the image file.
+
 ## Commands
 
-All commands use `scripts/cdp.mjs`. The `<target>` is a **unique** targetId prefix from `list`; copy the full prefix shown in the `list` output (for example `6BE827FA`). The CLI rejects ambiguous prefixes.
+All commands use `scripts/cdp.mjs`. The `<target>` is a **unique** targetId prefix from `list` (e.g. `A7BA5C64`). The CLI rejects ambiguous prefixes.
 
 ### List open pages
 
@@ -26,10 +47,11 @@ scripts/cdp.mjs list
 ### Take a screenshot
 
 ```bash
-scripts/cdp.mjs shot <target> [file]    # default: screenshot-<target>.png in runtime dir
+scripts/cdp.mjs shot <target> [file]    # default: screenshot-<target>.png
+scripts/cdp.mjs fullshot <target> [file] # full-page (beyond viewport)
 ```
 
-Captures the **viewport only**. Scroll first with `eval` if you need content below the fold. Output includes the page's DPR and coordinate conversion hint (see **Coordinates** below).
+Captures the **viewport only** (`shot`) or **full page** (`fullshot`). Output includes the file path and DPR (see **Coordinates** below).
 
 ### Accessibility tree snapshot
 
@@ -56,7 +78,7 @@ scripts/cdp.mjs summary <target>                  # token-efficient page overvie
 scripts/cdp.mjs console <target> [--all|--errors] # console buffer (default: unread only)
 ```
 
-> **Tip for agents:** Use `status` as your first command when debugging — it shows URL, title, and any console errors that have accumulated since the daemon started. Use `summary` for a quick page overview before deciding what to investigate.
+> **Agent tip:** Start with `status` when debugging — it shows URL, title, and buffered console errors. Use `summary` for a token-efficient overview (~100 tokens).
 
 ### Other commands
 
@@ -74,7 +96,6 @@ scripts/cdp.mjs hover   <target> <selector>          # hover element (triggers :
 scripts/cdp.mjs waitfor <target> <selector> [ms]      # wait for element to appear (default 10s)
 scripts/cdp.mjs fill    <target> <selector> <text>     # clear field + type text (form filling)
 scripts/cdp.mjs select  <target> <selector> <value>    # select <select> option by value
-scripts/cdp.mjs fullshot <target> [file]               # full-page screenshot (beyond viewport)
 scripts/cdp.mjs styles  <target> <selector>            # computed styles (meaningful props only)
 scripts/cdp.mjs cookies <target>                       # list cookies for current page
 scripts/cdp.mjs evalraw <target> <method> [json]  # raw CDP command passthrough
@@ -96,10 +117,8 @@ CSS px = screenshot image px / DPR
 
 - Prefer `snap` over `html` for page structure — compact by default, use `snap --full` for complete tree.
 - Use `type` (not eval) to enter text in cross-origin iframes — `click`/`clickxy` to focus first, then `type`.
-- Chrome shows an "Allow debugging" modal once per tab on first access. A background daemon keeps the session alive so subsequent commands need no further approval. Daemons auto-exit after 20 minutes of inactivity.
-- `status` is the primary debug entry point — always start here. It shows buffered console errors without needing to "wait and capture".
-- Console entries are buffered from the moment the daemon starts. Use `console --errors` to quickly find JS errors.
-- **Shell quoting**: CSS attribute selectors like `input[type=text]` contain shell metacharacters (`[`, `]`, `=`). Always wrap selectors in quotes: `click <t> 'input[type="text"]'`. This is a shell issue — when the agent calls commands via the daemon IPC (JSON), no quoting is needed.
+- Daemons keep CDP sessions alive per tab (auto-exit after 20min idle), so only the first command per tab triggers Chrome's "Allow debugging" dialog.
+- **Shell quoting**: CSS selectors like `input[type=text]` contain shell metacharacters. Always wrap in quotes: `click <t> 'input[type="text"]'`.
 
 ## Workflow Patterns
 
@@ -121,18 +140,6 @@ CSS px = screenshot image px / DPR
 3. `styles <target> ".suspect"` — inspect layout properties
 4. `eval <target> "document.querySelector('.suspect').getBoundingClientRect()"` — exact position
 
-## Source & Changelog
+## Source
 
-**Upstream**: [pasky/chrome-cdp-skill](https://github.com/pasky/chrome-cdp-skill) (v1.0.1)
-
-**Local modifications** (2026-03-16):
-- **Background observation**: Daemon buffers console output and exceptions from startup; `status`, `console`, `summary` commands query the buffer
-- **New commands**: `status` (primary debug entry point), `summary` (token-efficient overview), `console` (buffer query), `scroll`, `press` (keyboard events)
-- **snap --full flag**: Allow full (non-compact) accessibility tree output
-- **click upgrade**: Uses native CDP Input events instead of JS `.click()`
-- **DPR fix**: Simplified detection to JS-only
-- **Windows support**: `%LOCALAPPDATA%` browser paths, named pipes, POSIX guards
-- **Edge filter**: `edge://` internal pages excluded from `list`
-- **Automation commands**: `hover`, `waitfor`, `fill` (clear + type), `select` (dropdown)
-- **Deep debug commands**: `fullshot` (full-page screenshot), `styles` (computed styles), `cookies`
-- **Workflow patterns**: Added common debug/automation workflow documentation
+**Upstream**: [pasky/chrome-cdp-skill](https://github.com/pasky/chrome-cdp-skill) (v1.0.1) — locally modified with Windows support, background observation, and additional commands.
