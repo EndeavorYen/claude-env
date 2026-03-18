@@ -1,6 +1,6 @@
 ---
 name: chrome-cdp
-description: Interact with local Chrome browser session (only on explicit user approval after being asked to inspect, debug, or interact with a page open in Chrome)
+description: "Interact with local Chrome browser via CDP — take screenshots, inspect DOM, debug pages, automate forms.\n當用戶說「看瀏覽器」「瀏覽器內容」「查看網頁」「截圖」「screenshot」「Chrome」「inspect page」「debug page」「頁面上有什麼」「瀏覽器畫面」「看我的頁面」「check the page」「browser」時使用。"
 ---
 
 # Chrome CDP
