@@ -15,11 +15,38 @@ Lightweight Chrome DevTools Protocol CLI. Connects directly via WebSocket — no
 
 ## Agent Instructions
 
+### WSL2 → Windows Browser (IMPORTANT)
+
+When running inside WSL2 and controlling a browser on the Windows host:
+
+1. **WSL2 cannot connect to Windows localhost directly** — do NOT attempt `curl localhost:9222`, gateway IP routing, or any WSL→Windows network workarounds. They will all fail.
+2. **Use Windows-side Node.js** to run the CDP script. The script must be executed by the Windows Node.js binary so it connects to Chrome on the Windows side natively.
+3. **Finding Node.js on Windows from WSL**:
+   ```bash
+   # Step 1: Locate node.exe via PowerShell (most reliable)
+   powershell.exe -NoProfile -Command "(Get-Command node -ErrorAction SilentlyContinue).Source"
+   # Example output: C:\Users\simon.yen\tools\node-v24.14.0-win-x64\node.exe
+
+   # Step 2: Convert to WSL mount path and invoke
+   NODE_WIN="/mnt/c/Users/simon.yen/tools/node-v24.14.0-win-x64/node.exe"
+   "$NODE_WIN" /path/to/scripts/cdp.mjs list
+   ```
+4. **Do NOT guess paths** like `/mnt/c/Program Files/nodejs/node.exe` — always use PowerShell to locate the actual installation. Ask the user if PowerShell also fails.
+5. **Do NOT suggest `--remote-debugging-port`** restarts or separate `--user-data-dir` profiles. The correct prerequisite is `chrome://inspect/#remote-debugging` toggle only.
+
+### Standard (non-WSL) environments
+
 **Finding Node.js**: On Windows, `node` may not be in the bash PATH even if installed. If `node` is not found, use `powershell.exe -NoProfile -Command "(Get-Command node -ErrorAction SilentlyContinue).Source"` to locate it, then prepend its directory to PATH. Do NOT spend multiple attempts guessing paths — ask the user if PowerShell also fails.
 
-**Invoking commands**: The script is at `scripts/cdp.mjs` **relative to this skill's directory**. Use the full absolute path when invoking:
+### Invoking commands
+
+The script is at `scripts/cdp.mjs` **relative to this skill's directory**. Use the full absolute path when invoking:
 ```bash
+# Standard:
 node ~/.claude/plugins/.../skills/chrome-cdp/scripts/cdp.mjs <command> [args]
+
+# WSL2 (use Windows Node.js):
+"$NODE_WIN" ~/.claude/plugins/.../skills/chrome-cdp/scripts/cdp.mjs <command> [args]
 ```
 On first use, always start with `list` to verify connectivity and discover available tabs.
 
@@ -119,6 +146,7 @@ CSS px = screenshot image px / DPR
 - Use `type` (not eval) to enter text in cross-origin iframes — `click`/`clickxy` to focus first, then `type`.
 - Daemons keep CDP sessions alive per tab (auto-exit after 20min idle), so only the first command per tab triggers Chrome's "Allow debugging" dialog.
 - **Shell quoting**: CSS selectors like `input[type=text]` contain shell metacharacters. Always wrap in quotes: `click <t> 'input[type="text"]'`.
+- **WSL2 gotcha**: Never try WSL2→Windows network workarounds (localhost, gateway IP, port forwarding). Always use Windows-side Node.js to run the CDP script — it connects to Chrome natively on the same OS.
 
 ## Workflow Patterns
 
