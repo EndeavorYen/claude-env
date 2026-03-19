@@ -18,6 +18,11 @@
       "name": "battle",
       "source": "./plugins/battle",
       "description": "Red-White adversarial quality battle for codebase improvement"
+    },
+    {
+      "name": "chrome-cdp",
+      "source": "./plugins/chrome-cdp",
+      "description": "Chrome CDP browser automation — screenshots, DOM inspection, form automation, console monitoring"
     }
   ]
 }

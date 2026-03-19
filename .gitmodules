@@ -1,0 +1,3 @@
+[submodule "plugins/chrome-cdp"]
+	path = plugins/chrome-cdp
+	url = https://github.com/EndeavorYen/chrome-cdp-skill.git

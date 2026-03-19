@@ -7,21 +7,15 @@ My Claude Code development environment. One repo to restore everything on any ma
 ```
 claude-env/
 ├── plugins/
-│   ├── misc/                  ← Personal miscellaneous skills & commands
-│   │   ├── .claude-plugin/plugin.json
-│   │   ├── skills/ (6 skills)
-│   │   └── commands/ (1 command)
-│   └── squad/                 ← Self-evolving agent team orchestrator
-│       ├── .claude-plugin/plugin.json
-│       ├── skills/ (7 skills)
-│       ├── commands/ (1 command)
-│       ├── hooks/
-│       └── config/
+│   ├── squad/                 ← in-repo: Self-evolving agent team orchestrator
+│   ├── misc/                  ← in-repo: Personal miscellaneous skills & commands
+│   ├── battle/                ← in-repo: Adversarial quality battle system
+│   └── chrome-cdp/            ← submodule → EndeavorYen/chrome-cdp-skill
 ├── .claude-plugin/
-│   └── marketplace.json       ← Points to plugins via relative paths
+│   └── marketplace.json       ← Points to plugins via relative paths (submodule or in-repo)
 ├── settings.json              ← Environment snapshot (plugins + permissions + preferences)
 ├── mcp.template.json          ← MCP server config template
-└── install.sh                 ← Setup and sync tool (two modes)
+└── install.sh                 ← Setup and sync (handles submodule init automatically)
 ```
 
 ## Architecture
@@ -54,15 +48,14 @@ Layer 2: Per-project (NOT managed by this repo)
                     claude-env (this repo)
                     Monorepo + Marketplace
                            │
-              ┌────────────┼────────────┐
-              ▼            ▼            ▼
-         plugins/squad  plugins/misc  settings.json
-         (in-repo)      (in-repo)     (official plugins
-                                       + permissions
-                                       + preferences)
+         ┌─────────────────┼─────────────────┐
+         ▼                 ▼                  ▼
+    plugins/ (in-repo)  plugins/ (submodule)  settings.json
+    squad, misc,        chrome-cdp →          (official plugins
+    battle              external repo          + permissions)
 ```
 
-All plugins live directly in this repo under `plugins/`. The marketplace references them via relative paths:
+Plugins live under `plugins/` — either directly in-repo or as **git submodules** pointing to external repos. The marketplace references all of them identically via relative paths. `install.sh` handles submodule initialization automatically in both the local checkout and the marketplace clone.
 
 | File | Format | Example | Why |
 |------|--------|---------|-----|
@@ -121,26 +114,24 @@ git add settings.json && git commit -m "update: env snapshot" && git push
 
 ### Adding a New Plugin
 
-1. Create the plugin directory structure:
+#### Option A: In-repo plugin (simple, for small/personal plugins)
 
+1. Create `plugins/<name>/.claude-plugin/plugin.json`
+2. Add skills/commands under `plugins/<name>/`
+3. Add entry to `.claude-plugin/marketplace.json`
+4. Add install line to `install.sh` (both `setup` and `sync` sections)
+5. Add `"<name>@my-env": true` to `settings.json`'s `enabledPlugins`
+
+#### Option B: External repo via submodule (for independently maintained plugins)
+
+```bash
+# 1. Add submodule
+git submodule add https://github.com/<owner>/<repo>.git plugins/<name>
+
+# 2. The external repo must have .claude-plugin/plugin.json at its root
 ```
-plugins/<name>/.claude-plugin/
-```
 
-2. Add `plugin.json` in that directory:
-
-```json
-{
-  "name": "<name>",
-  "version": "0.1.0",
-  "description": "What it does",
-  "author": { "name": "EndeavorYen" }
-}
-```
-
-3. Add skills and/or commands directories with content under `plugins/<name>/`.
-
-4. Add entry to `.claude-plugin/marketplace.json`:
+3. Add entry to `.claude-plugin/marketplace.json` (same as in-repo):
 
 ```json
 {
@@ -150,25 +141,15 @@ plugins/<name>/.claude-plugin/
 }
 ```
 
-5. Add to `settings.json`'s `enabledPlugins`:
-
-```json
-"<name>@my-env": true
-```
-
-If the plugin provides MCP tools, also add a `mcp__` permission rule in `permissions.allow`.
-
-6. Add install line to `install.sh` (in both `setup` and `sync` sections):
-
-```bash
-claude plugin install <name>@my-env --scope user
-```
-
-7. Push:
+4. Add install line to `install.sh` (both `setup` and `sync` sections)
+5. Add `"<name>@my-env": true` to `settings.json`'s `enabledPlugins`
+6. Push:
 
 ```bash
 git add -A && git commit && git push
 ```
+
+`install.sh` handles submodule initialization automatically — no manual `git submodule update` needed.
 
 ### Update all plugins to latest
 

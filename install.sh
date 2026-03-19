@@ -38,6 +38,18 @@ backup_if_exists() {
   fi
 }
 
+# init_submodules: ensure submodules are populated in a given directory
+# Used for both the local checkout and the marketplace clone
+init_submodules() {
+  local repo_dir="$1"
+  if [ -f "$repo_dir/.gitmodules" ]; then
+    echo "  Initializing submodules in $repo_dir..."
+    git -C "$repo_dir" submodule update --init --recursive 2>&1 || warn "Submodule update failed in $repo_dir"
+  fi
+}
+
+MARKETPLACE_CLONE="$HOME/.claude/plugins/marketplaces/my-env"
+
 is_interactive() {
   # True if stdin is a terminal (not piped, not CI, not SSH without TTY)
   [ -t 0 ]
@@ -130,7 +142,7 @@ echo ""
 
 # ─── SETUP Mode ──────────────────────────────────────────────────────
 if [ "$MODE" = "setup" ]; then
-  TOTAL=5
+  TOTAL=6
   STEP=1
 
   # 1. Git HTTPS config
@@ -150,36 +162,45 @@ if [ "$MODE" = "setup" ]; then
     echo "  Marketplace already registered, updated successfully."
   fi
 
-  # 3. Restore settings (with backup)
+  # 3. Initialize submodules (local checkout + marketplace clone)
   STEP=3
+  log "Initializing submodules..."
+  init_submodules "$DIR"
+  init_submodules "$MARKETPLACE_CLONE"
+
+  # 4. Restore settings (with backup)
+  STEP=4
   log "Restoring settings..."
   mkdir -p ~/.claude
   backup_if_exists ~/.claude/settings.json
   cp "$DIR/settings.json" ~/.claude/settings.json
   echo "  Restored settings.json from repo snapshot."
 
-  # 4. Install custom plugins
-  STEP=4
+  # 5. Install custom plugins
+  STEP=5
   log "Installing custom plugins..."
   claude plugin install squad@my-env --scope user || fail "Failed to install squad@my-env"
   claude plugin install misc@my-env --scope user || fail "Failed to install misc@my-env"
   claude plugin install battle@my-env --scope user || fail "Failed to install battle@my-env"
+  claude plugin install chrome-cdp@my-env --scope user || fail "Failed to install chrome-cdp@my-env"
 
-  # 5. Deploy MCP template
-  STEP=5
+  # 6. Deploy MCP template
+  STEP=6
   log "Deploying MCP template..."
   deploy_mcp_template
 
 # ─── SYNC Mode ───────────────────────────────────────────────────────
 elif [ "$MODE" = "sync" ]; then
-  TOTAL=4
+  TOTAL=5
   STEP=1
 
-  # 1. Update marketplace
+  # 1. Update marketplace + submodules
   log "Updating marketplace registry..."
   if ! claude plugin marketplace update my-env 2>&1; then
     fail "Could not update marketplace 'my-env'. Is it registered? Run 'setup' first."
   fi
+  init_submodules "$DIR"
+  init_submodules "$MARKETPLACE_CLONE"
 
   # 2. Merge settings (non-destructive, array-union for permissions)
   STEP=2
@@ -210,6 +231,7 @@ elif [ "$MODE" = "sync" ]; then
   claude plugin install squad@my-env --scope user || fail "Failed to install squad@my-env"
   claude plugin install misc@my-env --scope user || fail "Failed to install misc@my-env"
   claude plugin install battle@my-env --scope user || fail "Failed to install battle@my-env"
+  claude plugin install chrome-cdp@my-env --scope user || fail "Failed to install chrome-cdp@my-env"
 
   # 4. Deploy MCP template
   STEP=4
@@ -230,7 +252,7 @@ echo "=== Done! ==="
 echo ""
 echo "  Mode             : $MODE"
 echo "  Official plugins : 26 enabled + 1 disabled (serena — use .mcp.json instead)"
-echo "  Custom plugins   : squad, misc, battle (from my-env marketplace)"
+echo "  Custom plugins   : squad, misc, battle, chrome-cdp (from my-env marketplace)"
 echo "  Settings         : permissions, effortLevel, autoUpdatesChannel"
 echo "  MCP template     : ~/.claude/mcp.template.json"
 echo ""
