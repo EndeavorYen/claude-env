@@ -18,5 +18,8 @@ Desktop.ini
 plugins/squad/.claude/
 .worktrees/
 
+# External plugins (cloned by install.sh, not tracked in this repo)
+plugins/chrome-cdp/
+
 # Serena
 .serena/

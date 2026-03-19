@@ -38,14 +38,42 @@ backup_if_exists() {
   fi
 }
 
-# init_submodules: ensure submodules are populated in a given directory
-# Used for both the local checkout and the marketplace clone
-init_submodules() {
-  local repo_dir="$1"
-  if [ -f "$repo_dir/.gitmodules" ]; then
-    echo "  Initializing submodules in $repo_dir..."
-    git -C "$repo_dir" submodule update --init --recursive 2>&1 || warn "Submodule update failed in $repo_dir"
-  fi
+# External plugins: standalone repos cloned into the marketplace clone
+# Add entries here for plugins that live in their own repo (not in this monorepo)
+EXTERNAL_PLUGINS=(
+  "chrome-cdp|https://github.com/EndeavorYen/chrome-cdp-skill.git"
+)
+
+# sync_external_plugins: clone or pull external plugin repos into marketplace clone
+sync_external_plugins() {
+  local target_dir="$MARKETPLACE_CLONE/plugins"
+  mkdir -p "$target_dir"
+  for entry in "${EXTERNAL_PLUGINS[@]}"; do
+    local name="${entry%%|*}"
+    local url="${entry##*|}"
+    local dest="$target_dir/$name"
+    if [ -d "$dest/.git" ]; then
+      echo "  Updating external plugin: $name"
+      git -C "$dest" pull --ff-only 2>&1 || {
+        warn "Fast-forward failed for $name — re-cloning..."
+        rm -rf "$dest"
+        git clone --depth 1 "$url" "$dest" 2>&1 || warn "Failed to clone $name"
+      }
+    else
+      echo "  Cloning external plugin: $name"
+      rm -rf "$dest"
+      git clone --depth 1 "$url" "$dest" 2>&1 || warn "Failed to clone $name"
+    fi
+  done
+}
+
+# Custom plugins installed from the marketplace (used in both setup and sync)
+CUSTOM_PLUGINS=(squad misc battle chrome-cdp)
+
+install_custom_plugins() {
+  for name in "${CUSTOM_PLUGINS[@]}"; do
+    claude plugin install "${name}@my-env" --scope user || fail "Failed to install ${name}@my-env"
+  done
 }
 
 MARKETPLACE_CLONE="$HOME/.claude/plugins/marketplaces/my-env"
@@ -162,11 +190,10 @@ if [ "$MODE" = "setup" ]; then
     echo "  Marketplace already registered, updated successfully."
   fi
 
-  # 3. Initialize submodules (local checkout + marketplace clone)
+  # 3. Sync external plugins into marketplace clone
   STEP=3
-  log "Initializing submodules..."
-  init_submodules "$DIR"
-  init_submodules "$MARKETPLACE_CLONE"
+  log "Syncing external plugins..."
+  sync_external_plugins
 
   # 4. Restore settings (with backup)
   STEP=4
@@ -179,10 +206,7 @@ if [ "$MODE" = "setup" ]; then
   # 5. Install custom plugins
   STEP=5
   log "Installing custom plugins..."
-  claude plugin install squad@my-env --scope user || fail "Failed to install squad@my-env"
-  claude plugin install misc@my-env --scope user || fail "Failed to install misc@my-env"
-  claude plugin install battle@my-env --scope user || fail "Failed to install battle@my-env"
-  claude plugin install chrome-cdp@my-env --scope user || fail "Failed to install chrome-cdp@my-env"
+  install_custom_plugins
 
   # 6. Deploy MCP template
   STEP=6
@@ -191,16 +215,15 @@ if [ "$MODE" = "setup" ]; then
 
 # ─── SYNC Mode ───────────────────────────────────────────────────────
 elif [ "$MODE" = "sync" ]; then
-  TOTAL=5
+  TOTAL=4
   STEP=1
 
-  # 1. Update marketplace + submodules
+  # 1. Update marketplace + external plugins
   log "Updating marketplace registry..."
   if ! claude plugin marketplace update my-env 2>&1; then
     fail "Could not update marketplace 'my-env'. Is it registered? Run 'setup' first."
   fi
-  init_submodules "$DIR"
-  init_submodules "$MARKETPLACE_CLONE"
+  sync_external_plugins
 
   # 2. Merge settings (non-destructive, array-union for permissions)
   STEP=2
@@ -228,10 +251,7 @@ elif [ "$MODE" = "sync" ]; then
   # 3. Re-install custom plugins (idempotent)
   STEP=3
   log "Syncing custom plugins..."
-  claude plugin install squad@my-env --scope user || fail "Failed to install squad@my-env"
-  claude plugin install misc@my-env --scope user || fail "Failed to install misc@my-env"
-  claude plugin install battle@my-env --scope user || fail "Failed to install battle@my-env"
-  claude plugin install chrome-cdp@my-env --scope user || fail "Failed to install chrome-cdp@my-env"
+  install_custom_plugins
 
   # 4. Deploy MCP template
   STEP=4
