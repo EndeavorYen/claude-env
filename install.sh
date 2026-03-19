@@ -38,35 +38,6 @@ backup_if_exists() {
   fi
 }
 
-# External plugins: standalone repos cloned into the marketplace clone
-# Add entries here for plugins that live in their own repo (not in this monorepo)
-EXTERNAL_PLUGINS=(
-  "chrome-cdp|https://github.com/EndeavorYen/chrome-cdp-skill.git"
-)
-
-# sync_external_plugins: clone or pull external plugin repos into marketplace clone
-sync_external_plugins() {
-  local target_dir="$MARKETPLACE_CLONE/plugins"
-  mkdir -p "$target_dir"
-  for entry in "${EXTERNAL_PLUGINS[@]}"; do
-    local name="${entry%%|*}"
-    local url="${entry##*|}"
-    local dest="$target_dir/$name"
-    if [ -d "$dest/.git" ]; then
-      echo "  Updating external plugin: $name"
-      git -C "$dest" pull --ff-only 2>&1 || {
-        warn "Fast-forward failed for $name — re-cloning..."
-        rm -rf "$dest"
-        git clone --depth 1 "$url" "$dest" 2>&1 || warn "Failed to clone $name"
-      }
-    else
-      echo "  Cloning external plugin: $name"
-      rm -rf "$dest"
-      git clone --depth 1 "$url" "$dest" 2>&1 || warn "Failed to clone $name"
-    fi
-  done
-}
-
 # Custom plugins installed from the marketplace (used in both setup and sync)
 CUSTOM_PLUGINS=(squad misc battle chrome-cdp)
 
@@ -170,7 +141,7 @@ echo ""
 
 # ─── SETUP Mode ──────────────────────────────────────────────────────
 if [ "$MODE" = "setup" ]; then
-  TOTAL=6
+  TOTAL=5
   STEP=1
 
   # 1. Git HTTPS config
@@ -190,26 +161,21 @@ if [ "$MODE" = "setup" ]; then
     echo "  Marketplace already registered, updated successfully."
   fi
 
-  # 3. Sync external plugins into marketplace clone
+  # 3. Restore settings (with backup)
   STEP=3
-  log "Syncing external plugins..."
-  sync_external_plugins
-
-  # 4. Restore settings (with backup)
-  STEP=4
   log "Restoring settings..."
   mkdir -p ~/.claude
   backup_if_exists ~/.claude/settings.json
   cp "$DIR/settings.json" ~/.claude/settings.json
   echo "  Restored settings.json from repo snapshot."
 
-  # 5. Install custom plugins
-  STEP=5
+  # 4. Install custom plugins
+  STEP=4
   log "Installing custom plugins..."
   install_custom_plugins
 
-  # 6. Deploy MCP template
-  STEP=6
+  # 5. Deploy MCP template
+  STEP=5
   log "Deploying MCP template..."
   deploy_mcp_template
 
@@ -218,12 +184,11 @@ elif [ "$MODE" = "sync" ]; then
   TOTAL=4
   STEP=1
 
-  # 1. Update marketplace + external plugins
+  # 1. Update marketplace
   log "Updating marketplace registry..."
   if ! claude plugin marketplace update my-env 2>&1; then
     fail "Could not update marketplace 'my-env'. Is it registered? Run 'setup' first."
   fi
-  sync_external_plugins
 
   # 2. Merge settings (non-destructive, array-union for permissions)
   STEP=2

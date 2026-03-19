@@ -21,7 +21,10 @@
     },
     {
       "name": "chrome-cdp",
-      "source": "./plugins/chrome-cdp",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/EndeavorYen/chrome-cdp-skill.git"
+      },
       "description": "Chrome CDP browser automation — screenshots, DOM inspection, form automation, console monitoring"
     }
   ]
