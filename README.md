@@ -10,7 +10,7 @@ claude-env/
 │   ├── squad/                 ← in-repo: Self-evolving agent team orchestrator
 │   ├── misc/                  ← in-repo: Personal miscellaneous skills & commands
 │   ├── battle/                ← in-repo: Adversarial quality battle system
-│   └── chrome-cdp/            ← submodule → EndeavorYen/chrome-cdp-skill
+│   └── chrome-cdp/            ← submodule → EndeavorYen/chrome-cdp-ex
 ├── .claude-plugin/
 │   └── marketplace.json       ← Points to plugins via relative paths (submodule or in-repo)
 ├── settings.json              ← Environment snapshot (plugins + permissions + preferences)
