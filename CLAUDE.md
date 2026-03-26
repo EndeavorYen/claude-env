@@ -22,7 +22,7 @@ claude-env (this repo)          ← monorepo：plugin 原始碼 + 環境設定
     │   └── marketplace.json    ← 指向 plugins/ 子目錄（相對路徑）
     │
     ├── settings.json           ← 完整環境快照
-    │   ├── enabledPlugins      (26 official enabled + 1 disabled + 3 custom)
+    │   ├── enabledPlugins      (26 official enabled + 3 custom)
     │   ├── extraKnownMarketplaces
     │   ├── permissions         (allow/deny — 權限的唯一 source of truth)
     │   ├── autoUpdatesChannel
@@ -40,10 +40,7 @@ Claude Code 的設定分兩層，這個 repo 只管全域層：
 | 層級 | 檔案 | 由誰管理 | 說明 |
 |------|------|---------|------|
 | **全域** | `~/.claude/settings.json` | 本 repo（`install.sh` 還原） | plugins、permissions、preferences |
-| **專案級** | `<project>/.mcp.json` | 各專案自己管 | MCP server 設定（serena 等），可能含 tokens |
-| **專案級** | `<project>/.serena/` | 各專案自己管 | Serena 專案設定 + memories |
-
-**為什麼 serena 在 enabledPlugins 裡是 `false`**：Serena 用 `.mcp.json` 方式更好（不同專案可以不同設定）。Plugin 版停用避免兩組 MCP server 同時啟動。詳見 [Serena setup guide](docs/serena-setup-guide.md)。
+| **專案級** | `<project>/.mcp.json` | 各專案自己管 | MCP server 設定，可能含 tokens |
 
 **MCP server 設定不在這個 repo 裡**：`.mcp.json` 是專案級檔案，可能含 tokens，不進版控。本 repo 提供 `mcp.template.json` 作為起點。
 

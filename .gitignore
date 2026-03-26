@@ -17,6 +17,3 @@ Desktop.ini
 # Squad runtime state (generated per-project, not tracked)
 plugins/squad/.claude/
 .worktrees/
-
-# Serena
-.serena/

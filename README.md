@@ -27,18 +27,15 @@ Claude Code reads configuration from multiple layers. This repo manages the glob
 ```
 Layer 1: Global (this repo manages)
   ~/.claude/settings.json
-  ├── enabledPlugins       26 official enabled + 1 disabled (serena) + 2 custom
+  ├── enabledPlugins       26 official enabled + 2 custom
   ├── extraKnownMarketplaces
   ├── permissions          allow/deny rules (single source of truth)
   ├── autoUpdatesChannel
   └── effortLevel
 
 Layer 2: Per-project (NOT managed by this repo)
-  <project>/.mcp.json      MCP server configs (serena, etc.)
-  <project>/.serena/        Serena project settings + memories
+  <project>/.mcp.json      MCP server configs
 ```
-
-**Why serena is disabled in enabledPlugins**: Serena works better as a per-project `.mcp.json` config (different projects need different settings). The plugin version is disabled to avoid duplicate MCP servers. See [Serena setup guide](docs/serena-setup-guide.md).
 
 **MCP servers are per-project**: This repo provides `mcp.template.json` as a starting point, but actual `.mcp.json` files live in each project and are gitignored (they may contain tokens).
 
@@ -99,7 +96,7 @@ cp ~/.claude/mcp.template.json /path/to/project/.mcp.json
 echo ".mcp.json" >> /path/to/project/.gitignore
 ```
 
-See [Serena setup guide](docs/serena-setup-guide.md) and [Claude Code setup guide](docs/claude-code-setup-guide.md) for full details.
+See [Claude Code setup guide](docs/claude-code-setup-guide.md) for full details.
 
 ## Daily Operations
 
