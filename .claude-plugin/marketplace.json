@@ -20,7 +20,7 @@
       "description": "Red-White adversarial quality battle for codebase improvement"
     },
     {
-      "name": "chrome-cdp",
+      "name": "chrome-cdp-ex",
       "source": {
         "source": "url",
         "url": "https://github.com/EndeavorYen/chrome-cdp-ex.git"
