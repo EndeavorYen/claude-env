@@ -13,7 +13,8 @@ Critically challenge the current proposal, plan, or design with brutal honesty.
 
 ## When to Trigger
 
-When the user says `/challenge` or similar, challenge the **most recent proposal/plan/design in the current conversation**.
+- `/challenge` (no args): challenge the most recent proposal/plan/design in the current conversation.
+- `/challenge <target>`: challenge the specified artifact, file, or concept.
 
 ---
 

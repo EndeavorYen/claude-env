@@ -4,7 +4,7 @@ description: >-
   Write or improve Markdown documents (including README) with clear structure,
   practical examples, and repository-consistent style.
   Trigger when the user asks to write, rewrite, polish, or professionalize any
-  .md document (e.g. "write doc", "write README", "改善文件", "文件撰寫").
+  .md document (e.g. "write doc", "write README", "improve docs", "polish document").
   Do not trigger for pure translation, non-Markdown editing, or tiny typo-only
   fixes unless the user explicitly asks for documentation authorship.
 ---
