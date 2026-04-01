@@ -38,6 +38,22 @@ Write professional, scannable Markdown that helps readers take action quickly.
 - The user only wants minor typo fixes without structural/doc-writing work.
 - The target is not Markdown (unless the user asks to produce Markdown output).
 
+## Anti-pattern self-check
+
+Before writing, verify you're not falling into these traps:
+
+| Trap | Symptom | Consequence |
+|------|---------|-------------|
+| **Verbose filler** | Paragraphs that sound professional but convey zero information ("In today's rapidly evolving landscape...") | Reader skips the whole doc, misses the parts that matter |
+| **Over-structuring** | 8 headings and a table of contents for a 30-line document | Structure becomes noise; the doc is harder to read, not easier |
+| **Marketing voice** | Generic superlatives ("powerful", "seamless", "robust") with no concrete claims | Erodes trust — reader assumes the author has nothing real to say |
+| **Burying the lead** | Three paragraphs of context before the reader learns what this thing does or how to use it | Reader leaves before reaching the actionable content |
+| **Phantom sections** | Generating headings the user never asked for and filling them with padding to look thorough | Bloats the doc, creates maintenance burden, signals low confidence |
+
+**If your draft smells like any of the above, cut it before delivering.**
+
+---
+
 ## Workflow
 
 ### Phase 0 - quick context gathering
@@ -55,7 +71,7 @@ Before writing, gather only what is necessary:
 
 If context is missing, make reasonable assumptions and continue. Ask questions only when ambiguity can cause major rework.
 
-### Phase 1 - structure design
+### Phase 1 - structure and layout
 
 Build a clear skeleton first, then fill it quickly.
 
@@ -77,7 +93,7 @@ One- to two-sentence summary of what this is and why it matters.
 ## Troubleshooting / FAQ (if needed)
 ```
 
-### Phase 1.5 - layout and readability heuristics
+#### Layout and readability heuristics
 
 Use these as defaults, then adapt to repo style.
 
@@ -98,6 +114,7 @@ Use these as defaults, then adapt to repo style.
 
 - Use `code` for commands, paths, identifiers, and config keys.
 - Use **bold** for truly important terms, not every line.
+- Do not use emojis in documents. They add visual noise without information value and undermine a professional tone. If the existing document already uses emojis as a deliberate convention, follow the existing style.
 - Avoid decorative formatting that does not improve scanning.
 
 #### Heading heuristics
@@ -133,19 +150,7 @@ Use these as defaults, then adapt to repo style.
 
 ### Phase 3 - validation and polish
 
-Before final delivery, run applicable checks when tools are available.
-
-#### Optional verification commands
-
-```bash
-# style/lint (example)
-npx markdownlint-cli2 "**/*.md"
-
-# link check (example)
-lychee README.md
-```
-
-If these tools are unavailable, perform manual checks and explicitly label items as "not tool-verified".
+Before final delivery, run project-configured linters if available (`markdownlint`, `lychee`, etc.). If unavailable, perform manual checks and explicitly label items as "not tool-verified".
 
 #### Final quality gate
 
