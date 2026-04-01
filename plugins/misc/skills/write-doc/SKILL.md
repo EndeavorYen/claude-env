@@ -11,17 +11,19 @@ description: >-
 
 # write-doc - Markdown document authorship
 
-Write professional, scannable Markdown that helps readers take action quickly.
+Write short, scannable Markdown that helps readers act quickly. Less is more — every sentence must earn its place.
 
 ## Operating principles
 
-1. **Repository conventions override this skill.**
+1. **Less is more.**
+   Readers absorb less when there is more text. Cut ruthlessly. A shorter doc that gets read beats a thorough doc that gets skipped.
+2. **Repository conventions override this skill.**
    If the repo already has style rules (CONTRIBUTING, docs style guide, existing docs voice, markdownlint config), follow those first.
-2. **Deliver a complete first draft by default.**
+3. **Deliver a complete first draft by default.**
    Do not force outline approval loops unless the request is ambiguous or high-risk.
-3. **Treat formatting rules as heuristics, not absolute laws.**
+4. **Treat formatting rules as heuristics, not absolute laws.**
    Optimize for clarity and consistency in the target project.
-4. **Be explicit about verification.**
+5. **Be explicit about verification.**
    If code snippets or links were not executed/checked, state that clearly.
 
 ## Trigger boundaries
@@ -42,13 +44,15 @@ Write professional, scannable Markdown that helps readers take action quickly.
 
 Before writing, verify you're not falling into these traps:
 
-| Trap | Symptom | Consequence |
-|------|---------|-------------|
-| **Verbose filler** | Paragraphs that sound professional but convey zero information ("In today's rapidly evolving landscape...") | Reader skips the whole doc, misses the parts that matter |
-| **Over-structuring** | 8 headings and a table of contents for a 30-line document | Structure becomes noise; the doc is harder to read, not easier |
-| **Marketing voice** | Generic superlatives ("powerful", "seamless", "robust") with no concrete claims | Erodes trust — reader assumes the author has nothing real to say |
-| **Burying the lead** | Three paragraphs of context before the reader learns what this thing does or how to use it | Reader leaves before reaching the actionable content |
-| **Phantom sections** | Generating headings the user never asked for and filling them with padding to look thorough | Bloats the doc, creates maintenance burden, signals low confidence |
+| Trap | Symptom | Fix |
+|------|---------|-----|
+| **Verbose filler** | "In today's rapidly evolving landscape..." | Delete the sentence. If nothing is lost, it was filler. |
+| **Over-structuring** | 8 headings for a 30-line doc | Flatten. If a section has < 3 lines of content, merge it up. |
+| **Marketing voice** | "powerful", "seamless", "robust" | Replace with a concrete claim or delete. |
+| **Burying the lead** | 3 paragraphs before the reader learns what this does | Move the action/answer to line 1. |
+| **Phantom sections** | Headings filled with padding to look thorough | Delete the heading entirely. |
+| **Wall of text** | Any paragraph > 3 lines with no visual break | Split, convert to list, or add a table. |
+| **Equal-weight everything** | Every item bold, every section same length | Use emphasis sparingly — if everything is highlighted, nothing is. |
 
 **If your draft smells like any of the above, cut it before delivering.**
 
@@ -82,44 +86,67 @@ Build a clear skeleton first, then fill it quickly.
 
 #### Skeleton template
 
+Every document starts with a TL;DR block. No exceptions.
+
 ```markdown
 # Title
 
-One- to two-sentence summary of what this is and why it matters.
+> **TL;DR** — 1-3 sentences. What this is, what the reader can do with it, and the single most important thing to know. A reader who stops here should still get value.
 
 ## Quick start or key outcome
 ## Core details
-## Advanced or reference
-## Troubleshooting / FAQ (if needed)
+## Advanced or reference (link out if lengthy)
 ```
 
-#### Layout and readability heuristics
+#### Summary-first rule
 
-Use these as defaults, then adapt to repo style.
+Each section's first sentence must be the **conclusion or takeaway** of that section. Details follow. A reader who reads only first sentences should understand the full story.
 
-#### Spacing heuristics
+#### Density budget
 
-- Leave one blank line after headings, paragraphs, lists, tables, and code blocks.
-- Use section dividers (`---`) only at major topic shifts.
-- Avoid visually dense sections with no breaks.
+These are defaults. Adjust for document type, but always justify exceeding them.
 
-#### Density heuristics
+| Scope | Budget |
+|-------|--------|
+| TL;DR block | ≤ 3 sentences |
+| Any single section | ≤ 15 lines of content (excluding code blocks) |
+| Any single paragraph | ≤ 3 lines — longer paragraphs must be split or converted to a list |
+| Entire README | ≤ 300 words of prose (code blocks excluded) |
+| Entire tutorial | ≤ 800 words of prose |
+| Other docs | ≤ 600 words of prose unless complexity demands more |
 
-- One idea per paragraph when possible.
-- Prefer splitting very long lists with subheadings.
-- Use tables for comparisons and option matrices.
-- Use prose for narrative flow; use lists for scan targets.
+When a section exceeds its budget: split into sub-sections, convert prose to table/list, or move details to a linked sub-document.
+
+#### Scannable-first format defaults
+
+Choose format by information type — prose is the last resort, not the default.
+
+| Information type | Preferred format |
+|-----------------|-----------------|
+| Comparisons, options, feature lists | Table |
+| Steps, procedures, ordered items | Numbered list (one line per step) |
+| Requirements, properties, items | Bullet list |
+| Rationale, trade-offs, narrative context | Short prose (≤ 3 lines per paragraph) |
+
+#### Whitespace as design
+
+Whitespace is not wasted space — it directs the reader's eye.
+
+- One blank line after every heading, paragraph, list, table, and code block.
+- `---` only at major topic shifts (≤ 2 per document).
+- If a screen of text has no visual break, it needs one.
 
 #### Emphasis heuristics
 
 - Use `code` for commands, paths, identifiers, and config keys.
-- Use **bold** for truly important terms, not every line.
-- Do not use emojis in documents. They add visual noise without information value and undermine a professional tone. If the existing document already uses emojis as a deliberate convention, follow the existing style.
+- Use **bold** sparingly — if more than ~2 items per section are bold, nothing stands out.
+- Do not use emojis. They add visual noise without information value. Follow existing repo conventions if they already use emojis.
 - Avoid decorative formatting that does not improve scanning.
 
 #### Heading heuristics
 
 - Keep headings short and descriptive.
+- If a section has < 3 lines of content, it probably doesn't need its own heading — merge it.
 - Keep heading style consistent within the same document.
 - Avoid skipping levels unless repo conventions explicitly allow it.
 
@@ -148,18 +175,34 @@ Use these as defaults, then adapt to repo style.
 - Use inline links for one-off references.
 - Use reference-style links if the same URL appears repeatedly.
 
+### Phase 2.5 - cut pass
+
+After drafting, do a dedicated editing pass with one goal: **make it shorter.**
+
+1. Re-read every paragraph. Delete any sentence where removing it loses nothing.
+2. Check every section against the density budget. If over, cut or restructure.
+3. Look for repeated ideas across sections. Say it once, in the best place.
+4. Convert any remaining prose paragraph > 3 lines into a list or table.
+5. Remove qualifiers and hedging ("it should be noted that", "it is important to", "basically", "essentially").
+
+**Target: cut ≥ 20% of word count from the first draft.** If you cannot find 20% to cut, the first draft was already tight — good. But always look.
+
 ### Phase 3 - validation and polish
 
 Before final delivery, run project-configured linters if available (`markdownlint`, `lychee`, etc.). If unavailable, perform manual checks and explicitly label items as "not tool-verified".
 
 #### Final quality gate
 
+- [ ] TL;DR block exists and is ≤ 3 sentences.
 - [ ] First paragraph explains what this is and why it matters.
 - [ ] Headings alone communicate the document storyline.
+- [ ] No section exceeds 15 lines of prose content.
+- [ ] No paragraph exceeds 3 lines.
+- [ ] Prose word count is within budget for document type.
 - [ ] Commands/snippets are syntactically plausible and copy-paste friendly.
 - [ ] Internal links and anchors are valid (or flagged if unverified).
 - [ ] Formatting is consistent with repository conventions.
-- [ ] Assumptions are explicit where context was missing.
+- [ ] A cut pass was performed — no obvious filler, hedging, or repetition remains.
 
 ## README specialization
 
@@ -186,27 +229,22 @@ A README should improve **discoverability** and **activation** quickly.
 ```markdown
 # Project name
 
-One-line value statement.
+> **TL;DR** — What this does and why you'd use it, in 1-2 sentences.
 
-## What this does
-## Quick start
-## Prerequisites and installation
-## Usage
-## Configuration
-## Troubleshooting
-## Contributing / Ownership
-## License (if applicable)
+## Quick start       ← reader should reach runnable code within 10 lines
+## What this does    ← only if quick start alone isn't self-explanatory
+## Configuration     ← only if there are user-facing options
+## Troubleshooting   ← only if common pitfalls exist
 ```
 
-Not every section is required. Keep only sections that create reader value.
+**Only include sections that earn their space.** A 4-section README that gets read is better than an 8-section one that doesn't.
 
 ### README anti-patterns
 
-- Long generic intro before any actionable example.
-- Table of contents in the first screen for short READMEs.
-- Feature lists with no user benefit language.
-- Outdated badges/screenshots that reduce trust.
-- Placeholder sections (`TODO`, empty headings) left in final output.
+- Long intro before any runnable example.
+- Table of contents for a README that fits on one screen.
+- Feature lists with no concrete benefit language.
+- Placeholder sections (`TODO`, empty headings) in final output.
 
 ## Output contract
 
