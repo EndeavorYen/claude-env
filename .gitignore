@@ -18,5 +18,8 @@ Desktop.ini
 plugins/squad/.claude/
 .worktrees/
 
-# Serina
+# Serena
 .serena
+
+# OMC
+.omc
