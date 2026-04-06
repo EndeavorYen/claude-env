@@ -39,7 +39,7 @@ backup_if_exists() {
 }
 
 # Custom plugins installed from the marketplace (used in both setup and sync)
-CUSTOM_PLUGINS=(squad misc battle chrome-cdp)
+CUSTOM_PLUGINS=(squad misc battle chrome-cdp-ex)
 
 install_custom_plugins() {
   for name in "${CUSTOM_PLUGINS[@]}"; do
@@ -65,8 +65,11 @@ merge_settings() {
   local output_file="$3"
 
   jq -s '
-    # Start with object-level merge (local wins on scalar conflicts)
-    (.[0] * .[1]) as $merged |
+    # Start with object-level merge (repo wins on scalar conflicts)
+    # This ensures settings like effortLevel and autoUpdatesChannel always
+    # reflect the repo snapshot, while local additions are still preserved
+    # via the explicit array unions for permissions below.
+    (.[1] * .[0]) as $merged |
 
     # For permissions.allow and permissions.deny, compute the union of both arrays
     # so that neither repo nor local rules are silently dropped
@@ -136,7 +139,7 @@ case "$MODE" in
 esac
 
 echo ""
-echo "=== Claude Dev Environment — ${MODE^^} ==="
+echo "=== Claude Dev Environment — $(echo "$MODE" | tr '[:lower:]' '[:upper:]') ==="
 echo ""
 
 # ─── SETUP Mode ──────────────────────────────────────────────────────
@@ -237,7 +240,7 @@ echo "=== Done! ==="
 echo ""
 echo "  Mode             : $MODE"
 echo "  Official plugins : 26 enabled"
-echo "  Custom plugins   : squad, misc, battle, chrome-cdp (from my-env marketplace)"
+echo "  Custom plugins   : squad, misc, battle, chrome-cdp-ex (from my-env marketplace)"
 echo "  Settings         : permissions, effortLevel, autoUpdatesChannel"
 echo "  MCP template     : ~/.claude/mcp.template.json"
 echo ""

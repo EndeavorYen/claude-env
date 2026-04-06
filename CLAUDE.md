@@ -103,10 +103,10 @@ mkdir -p plugins/<name>/.claude-plugin
 
 如果 plugin 提供 MCP tools，也要在 `permissions.allow` 加對應的 `mcp__` 規則。
 
-5. 在 `install.sh` 的 setup 和 sync 兩個區塊都加一行：
+5. 在 `install.sh` 頂端的 `CUSTOM_PLUGINS` 陣列加一個名稱：
 
 ```bash
-claude plugin install new-plugin-name@my-env --scope user
+CUSTOM_PLUGINS=(squad misc battle chrome-cdp-ex new-plugin-name)
 ```
 
 6. Commit + push。
