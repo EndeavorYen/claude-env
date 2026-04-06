@@ -75,6 +75,6 @@
     "type": "command",
     "command": "node C:/Users/endea/.claude/hud/omc-hud.mjs"
   },
-  "effortLevel": "high",
-  "model": "sonnet"
+  "effortLevel": "max",
+  "model": "Opus"
 }
