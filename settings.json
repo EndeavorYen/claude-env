@@ -71,10 +71,6 @@
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
   },
   "autoUpdatesChannel": "latest",
-  "statusLine": {
-    "type": "command",
-    "command": "node C:/Users/endea/.claude/hud/omc-hud.mjs"
-  },
   "effortLevel": "max",
   "model": "Opus"
 }

@@ -164,18 +164,20 @@ if [ "$MODE" = "setup" ]; then
     echo "  Marketplace already registered, updated successfully."
   fi
 
-  # 3. Restore settings (with backup)
+  # 3. Install custom plugins
+  # Must run BEFORE settings restore: claude plugin install rewrites settings.json
+  # as a side-effect, which would overwrite the restored settings if run after.
   STEP=3
+  log "Installing custom plugins..."
+  install_custom_plugins
+
+  # 4. Restore settings (with backup) — runs LAST to ensure its output is final
+  STEP=4
   log "Restoring settings..."
   mkdir -p ~/.claude
   backup_if_exists ~/.claude/settings.json
   cp "$DIR/settings.json" ~/.claude/settings.json
   echo "  Restored settings.json from repo snapshot."
-
-  # 4. Install custom plugins
-  STEP=4
-  log "Installing custom plugins..."
-  install_custom_plugins
 
   # 5. Deploy MCP template
   STEP=5
@@ -193,8 +195,16 @@ elif [ "$MODE" = "sync" ]; then
     fail "Could not update marketplace 'my-env'. Is it registered? Run 'setup' first."
   fi
 
-  # 2. Merge settings (non-destructive, array-union for permissions)
+  # 2. Re-install custom plugins (idempotent)
+  # Must run BEFORE settings merge: claude plugin install rewrites settings.json
+  # as a side-effect, which would overwrite the merged settings if run after.
   STEP=2
+  log "Syncing custom plugins..."
+  install_custom_plugins
+
+  # 3. Merge settings (non-destructive, array-union for permissions)
+  # Runs LAST among steps that touch settings.json, so its output is final.
+  STEP=3
   log "Merging settings..."
   if [ -f ~/.claude/settings.json ]; then
     if command -v jq &>/dev/null; then
@@ -215,11 +225,6 @@ elif [ "$MODE" = "sync" ]; then
     cp "$DIR/settings.json" ~/.claude/settings.json
     echo "  No local settings found. Restored from repo snapshot."
   fi
-
-  # 3. Re-install custom plugins (idempotent)
-  STEP=3
-  log "Syncing custom plugins..."
-  install_custom_plugins
 
   # 4. Deploy MCP template
   STEP=4
@@ -243,5 +248,19 @@ echo "  Official plugins : 26 enabled"
 echo "  Custom plugins   : squad, misc, battle, chrome-cdp-ex (from my-env marketplace)"
 echo "  Settings         : permissions, effortLevel, autoUpdatesChannel"
 echo "  MCP template     : ~/.claude/mcp.template.json"
+echo ""
+
+# ─── Machine-specific plugins (manual install required) ──────────────
+# These plugins need per-machine setup because they depend on local paths,
+# OS-specific binaries, or external services. install.sh does NOT install
+# them automatically — the user (or agent) should install after first setup.
+echo "--- Machine-Specific Plugins (manual) ---"
+echo ""
+echo "  oh-my-claudecode  Status line HUD & theme customization"
+echo "    Install:"
+echo "      claude plugin marketplace add https://github.com/Yeachan-Heo/oh-my-claudecode.git"
+echo "      claude plugin install oh-my-claudecode@omc --scope user"
+echo "    Then configure statusLine in ~/.claude/settings.json (path is OS-dependent)."
+echo "    Docs: https://github.com/Yeachan-Heo/oh-my-claudecode"
 echo ""
 echo "Start a new Claude Code session to verify."

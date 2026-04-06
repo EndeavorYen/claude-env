@@ -273,6 +273,22 @@ bash install.sh sync
 
 ---
 
+## Machine-Specific Plugins（需手動安裝）
+
+以下 plugins 因為依賴本機路徑或 OS 特定設定，**不會被 `install.sh` 自動安裝**。
+setup/sync 完成後，請提醒使用者依需求手動安裝：
+
+| Plugin | 功能 | 安裝指令 | 備註 |
+|--------|------|---------|------|
+| **oh-my-claudecode** | Status line HUD & theme 客製化 | `claude plugin marketplace add https://github.com/Yeachan-Heo/oh-my-claudecode.git` → `claude plugin install oh-my-claudecode@omc --scope user` | 安裝後需在 `~/.claude/settings.json` 設定 `statusLine`（路徑因 OS 而異），詳見 [oh-my-claudecode repo](https://github.com/Yeachan-Heo/oh-my-claudecode) |
+
+**Agent 注意事項：**
+- `install.sh` 結束後會印出 machine-specific plugins 清單，請逐一提醒使用者
+- `statusLine` 的 `command` 路徑是 OS 相關的（macOS: `~/.claude/...`, Windows: `C:/Users/<user>/.claude/...`），不要硬寫
+- 這些 plugin 的 marketplace 已在 `settings.json` 的 `extraKnownMarketplaces` 中預登錄
+
+---
+
 ## 完成後驗證
 
 開一個新的 Claude Code session，確認：
