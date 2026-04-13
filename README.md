@@ -14,7 +14,7 @@ claude-env/
 │   └── marketplace.json       ← Points to plugins (in-repo paths or external URLs)
 ├── settings.json              ← Environment snapshot (plugins + permissions + preferences)
 ├── mcp.template.json          ← MCP server config template
-├── rules/                     ← Shared global Claude rules (symlinked into ~/.claude/rules/)
+├── rules/                     ← Shared global Claude rules (anti-slop, debugging, verification)
 └── install.sh                 ← Setup and sync tool
 ```
 
@@ -65,6 +65,11 @@ This will:
 4. Install custom plugins (squad, misc, battle, chrome-cdp-ex)
 5. Deploy `mcp.template.json` to `~/.claude/` for easy project setup
 6. Symlink any repo `rules/*.md` into `~/.claude/rules/` so they apply globally without touching project `CLAUDE.md`
+
+Current shared rules:
+- `rules/anti-slop.md`
+- `rules/debugging-discipline.md`
+- `rules/verification-first.md`
 
 ## Sync on Another Machine
 
