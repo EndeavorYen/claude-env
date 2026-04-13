@@ -13,12 +13,14 @@ Usage: bash install.sh [setup|sync]
           - Restores settings.json (creates backup if exists)
           - Installs custom plugins
           - Deploys mcp.template.json to ~/.claude/mcp.template.json
+          - Symlinks repo rules/*.md into ~/.claude/rules/
 
   sync    Pull latest settings onto an existing machine.
           - Updates marketplace registry
           - Merges settings.json (array-union merge for allow/deny rules)
           - Re-installs custom plugins (idempotent)
           - Updates mcp.template.json
+          - Refreshes ~/.claude/rules/ symlinks from repo rules/*.md
 
   (no argument defaults to interactive prompt, or 'setup' if non-interactive)
 USAGE
@@ -102,6 +104,33 @@ deploy_mcp_template() {
   fi
 }
 
+# deploy_rules: Symlink repo rules/*.md into ~/.claude/rules/
+deploy_rules() {
+  local src_dir="$DIR/rules"
+  local dst_dir="$HOME/.claude/rules"
+
+  mkdir -p "$dst_dir"
+
+  if [ ! -d "$src_dir" ]; then
+    warn "rules/ not found in repo — skipping."
+    return
+  fi
+
+  local found=0
+  for src in "$src_dir"/*.md; do
+    if [ ! -e "$src" ]; then
+      continue
+    fi
+    found=1
+    ln -sfn "$src" "$dst_dir/$(basename "$src")"
+    echo "  Linked $(basename "$src") -> $dst_dir/$(basename "$src")"
+  done
+
+  if [ "$found" -eq 0 ]; then
+    warn "No rules/*.md found in repo — skipping."
+  fi
+}
+
 # ─── Mode Selection ──────────────────────────────────────────────────
 MODE="${1:-}"
 
@@ -144,7 +173,7 @@ echo ""
 
 # ─── SETUP Mode ──────────────────────────────────────────────────────
 if [ "$MODE" = "setup" ]; then
-  TOTAL=5
+  TOTAL=6
   STEP=1
 
   # 1. Git HTTPS config
@@ -184,9 +213,14 @@ if [ "$MODE" = "setup" ]; then
   log "Deploying MCP template..."
   deploy_mcp_template
 
+  # 6. Deploy global rules
+  STEP=6
+  log "Deploying global Claude rules..."
+  deploy_rules
+
 # ─── SYNC Mode ───────────────────────────────────────────────────────
 elif [ "$MODE" = "sync" ]; then
-  TOTAL=4
+  TOTAL=5
   STEP=1
 
   # 1. Update marketplace
@@ -230,6 +264,11 @@ elif [ "$MODE" = "sync" ]; then
   STEP=4
   log "Updating MCP template..."
   deploy_mcp_template
+
+  # 5. Deploy global rules
+  STEP=5
+  log "Updating global Claude rules..."
+  deploy_rules
 fi
 
 # ─── Sync official plugins (both modes) ──────────────────────────────
@@ -248,6 +287,7 @@ echo "  Official plugins : 26 enabled"
 echo "  Custom plugins   : squad, misc, battle, chrome-cdp-ex (from my-env marketplace)"
 echo "  Settings         : permissions, effortLevel, autoUpdatesChannel"
 echo "  MCP template     : ~/.claude/mcp.template.json"
+echo "  Global rules     : ~/.claude/rules/*.md (symlinked from repo rules/)"
 echo ""
 
 # ─── Machine-specific plugins (manual install required) ──────────────

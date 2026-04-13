@@ -14,6 +14,7 @@ claude-env/
 │   └── marketplace.json       ← Points to plugins (in-repo paths or external URLs)
 ├── settings.json              ← Environment snapshot (plugins + permissions + preferences)
 ├── mcp.template.json          ← MCP server config template
+├── rules/                     ← Shared global Claude rules (symlinked into ~/.claude/rules/)
 └── install.sh                 ← Setup and sync tool
 ```
 
@@ -63,6 +64,7 @@ This will:
 3. Restore `settings.json` (backs up existing if present)
 4. Install custom plugins (squad, misc, battle, chrome-cdp-ex)
 5. Deploy `mcp.template.json` to `~/.claude/` for easy project setup
+6. Symlink any repo `rules/*.md` into `~/.claude/rules/` so they apply globally without touching project `CLAUDE.md`
 
 ## Sync on Another Machine
 
@@ -71,7 +73,7 @@ cd ~/claude-env && git pull
 bash install.sh sync
 ```
 
-Sync mode merges settings non-destructively with array-union semantics: `permissions.allow` and `permissions.deny` rules from both repo and local are combined (neither side's rules are dropped). Scalar keys use local-wins strategy. Requires `jq`; falls back to overwrite with backup if unavailable. Works in non-interactive contexts (CI, piped execution).
+Sync mode merges settings non-destructively with array-union semantics: `permissions.allow` and `permissions.deny` rules from both repo and local are combined (neither side's rules are dropped). Scalar keys use local-wins strategy. Requires `jq`; falls back to overwrite with backup if unavailable. Works in non-interactive contexts (CI, piped execution). It also refreshes `~/.claude/rules/` symlinks from this repo's `rules/` directory.
 
 ## Setting Up MCP in a Project
 
