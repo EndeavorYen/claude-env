@@ -1,0 +1,1 @@
+/Users/simon/Code/claude-env/rules/anti-slop.md

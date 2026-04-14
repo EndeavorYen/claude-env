@@ -1,0 +1,1 @@
+/Users/simon/Code/claude-env/rules/verification-first.md
