@@ -2,6 +2,8 @@
 
 Use this rule before claiming completion.
 
+- Turn requests into verifiable outcomes before you start. Define what check would prove the task is done.
+- For multi-step work, keep a short plan with a verification step for each major change.
 - Verify with the narrowest meaningful check first, then widen scope if needed.
 - Do not claim success unless you ran the relevant test, command, build, or direct inspection.
 - If you did not verify something, state that explicitly.
